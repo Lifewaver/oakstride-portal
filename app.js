@@ -31,6 +31,7 @@
   var session = null;
   var profile = null;
   var adminTab = "arenden";
+  var viewAsCustomer = false;
 
   function show(name) {
     Object.keys(views).forEach(function (k) { views[k].hidden = k !== name; });
@@ -105,8 +106,9 @@
       }
       document.getElementById("user-email").textContent = profile.email;
       document.getElementById("admin-nav").hidden = !profile.is_admin;
+      document.getElementById("btn-viewas").hidden = !profile.is_admin;
       show("app");
-      if (profile.is_admin) renderAdmin(); else renderCustomer();
+      if (profile.is_admin && !viewAsCustomer) renderAdmin(); else renderCustomer();
     });
   }
 
@@ -141,6 +143,13 @@
         note.textContent = "Klart! Kolla din inkorg (" + email + ") och klicka på inloggningslänken.";
       }
     });
+  });
+
+  document.getElementById("btn-viewas").addEventListener("click", function () {
+    viewAsCustomer = !viewAsCustomer;
+    this.textContent = viewAsCustomer ? "Tillbaka till admin" : "Visa som kund";
+    document.getElementById("admin-nav").hidden = viewAsCustomer || !profile.is_admin;
+    if (viewAsCustomer) renderCustomer(); else renderAdmin();
   });
 
   document.getElementById("btn-logout").addEventListener("click", signOut);
@@ -181,6 +190,8 @@
     var q = sb.from("requests")
       .select("*" + (isAdmin ? ", owner:profiles!requests_user_id_fkey(full_name,email,company,website)" : ""))
       .order("created_at", { ascending: false });
+    // Kundvyn visar bara egna ärenden — även för admin i "visa som kund"-läget
+    if (!isAdmin) q = q.eq("user_id", session.user.id);
     q.then(function (res) {
       var box = document.getElementById("req-list");
       if (!box) return;
