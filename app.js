@@ -278,12 +278,63 @@
   // ---------- Kundvy ----------
 
   function renderCustomer() {
+    var site = (profile.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    var siteUrl = site ? "https://" + site : null;
+    var firstName = (profile.full_name || "").split(" ")[0];
     main.innerHTML =
-      '<div class="page-head"><h1>Dina ärenden</h1>' +
-      '<button id="btn-new" class="btn btn-primary btn-inline">+ Nytt ärende</button></div>' +
-      '<div id="req-list" class="req-list"><div class="spinner"></div></div>';
+      '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
+      '<div class="dash-grid">' +
+        '<div class="card dash-site"><h2>Din hemsida</h2>' +
+        (siteUrl
+          ? '<div class="site-thumb"><iframe src="' + esc(siteUrl) + '" scrolling="no" tabindex="-1" loading="lazy" title="Förhandsvisning av din hemsida"></iframe></div>' +
+            '<div class="site-row"><span class="site-domain">' + esc(site) + '</span>' +
+            '<a class="linklike" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Besök sajten &rarr;</a></div>'
+          : '<p class="muted">Din hemsida kopplas till kontot av OakStride — hör av dig om den inte syns här inom kort.</p>') +
+        '<button id="btn-new" class="btn btn-primary btn-big">✏️ Uppdatera min hemsida</button>' +
+        "</div>" +
+        '<div class="card dash-stats"><h2>Besökare</h2><div id="stats-box"><div class="spinner"></div></div></div>' +
+      "</div>" +
+      '<div class="card dash-reqs"><div class="page-head"><h2>Dina ärenden</h2>' +
+      '<button id="btn-new2" class="btn btn-google btn-inline btn-sm">+ Nytt ärende</button></div>' +
+      '<div id="req-list" class="req-list"><div class="spinner"></div></div></div>' +
+      '<div class="card dash-contact"><h2>Behöver du hjälp?</h2>' +
+      '<p class="muted">Vi finns ett mejl eller ett samtal bort — inga växlar, inga köer.</p>' +
+      '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
     document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
+    document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
     loadRequests(false);
+    loadStats(site);
+  }
+
+  function loadStats(site) {
+    var box = document.getElementById("stats-box");
+    if (!site) { box.innerHTML = '<p class="muted">Statistiken aktiveras när din hemsida är kopplad till kontot.</p>'; return; }
+    sb.rpc("site_stats", { p_site: site }).then(function (res) {
+      if (!box.isConnected) return;
+      var s = res.data;
+      if (res.error || !s) {
+        box.innerHTML = '<p class="muted">Besöksstatistik aktiveras för din hemsida inom kort.</p>';
+        return;
+      }
+      var daily = s.daily || [];
+      var max = 1;
+      daily.forEach(function (d) { if (d.c > max) max = d.c; });
+      var bars = daily.map(function (d) {
+        return '<div class="bar" style="height:' + Math.max(6, Math.round(100 * d.c / max)) + '%" title="' + esc(d.d) + ": " + d.c + ' besök"></div>';
+      }).join("");
+      box.innerHTML =
+        '<div class="stat-row">' +
+        '<div class="stat"><div class="stat-num">' + (s.total_7 || 0) + '</div><div class="stat-label">besök, 7 dagar</div></div>' +
+        '<div class="stat"><div class="stat-num">' + (s.total_30 || 0) + '</div><div class="stat-label">besök, 30 dagar</div></div>' +
+        "</div>" +
+        '<div class="bars" aria-label="Besök per dag, senaste 14 dagarna">' + bars + "</div>" +
+        ((s.top_pages && s.top_pages.length)
+          ? '<div class="top-pages"><strong>Mest besökta sidor</strong>' +
+            s.top_pages.map(function (p) {
+              return '<div class="top-page"><span>' + esc(p.path) + "</span><span>" + p.c + "</span></div>";
+            }).join("") + "</div>"
+          : '<p class="muted">Inga besök registrerade ännu — statistiken börjar samlas nu.</p>');
+    });
   }
 
   function loadRequests(isAdmin) {
