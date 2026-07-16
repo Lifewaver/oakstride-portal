@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 
@@ -31,17 +31,28 @@
     <div class="brand"><span class="brand-mark">OakStride</span> <span class="brand-sub">Portal</span></div>
     <h1>Logga in</h1>
     <p class="muted">Välkommen till kundportalen. Här skickar du önskemål om justeringar på din hemsida och följer status på dina ärenden.</p>
+    <form id="form-password">
+      <label for="login-email">E-postadress</label>
+      <input type="email" id="login-email" required placeholder="namn@foretag.se" autocomplete="email">
+      <label for="login-pass">Lösenord</label>
+      <input type="password" id="login-pass" required placeholder="Ditt lösenord" autocomplete="current-password">
+      <button type="submit" class="btn btn-primary">Logga in</button>
+    </form>
+    <p class="fineprint" style="margin-top:.6rem">
+      <button type="button" class="linklike" id="btn-forgot">Glömt lösenordet?</button> ·
+      <button type="button" class="linklike" id="btn-magic-mode">Första gången här? Logga in med engångslänk</button>
+    </p>
+    <div class="divider"><span>eller</span></div>
     <button id="btn-google" class="btn btn-google">
       <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
     Fortsätt med Google</button>
-    <div class="divider"><span>eller</span></div>
-    <form id="form-magic">
+    <form id="form-magic" hidden>
       <label for="magic-email">E-postadress</label>
-      <input type="email" id="magic-email" required placeholder="namn@foretag.se" autocomplete="email">
-      <button type="submit" class="btn btn-primary">Skicka inloggningslänk</button>
+      <input type="email" id="magic-email" placeholder="namn@foretag.se" autocomplete="email">
+      <button type="submit" class="btn btn-primary">Skicka engångslänk</button>
     </form>
     <p id="magic-status" class="status-note" hidden></p>
-    <p class="fineprint">Första gången du loggar in skapas ett konto som OakStride godkänner innan du får tillgång.</p>
+    <p class="fineprint">Första gången du loggar in skapas ett konto som OakStride godkänner innan du får tillgång. Efter första inloggningen väljer du ett eget lösenord.</p>
   </div>
 </div>
 
@@ -63,6 +74,23 @@
   </div>
 </div>
 
+<div id="view-setpass" class="view center-view" hidden>
+  <div class="card auth-card">
+    <div class="brand"><span class="brand-mark">OakStride</span> <span class="brand-sub">Portal</span></div>
+    <h1>Välj ditt lösenord</h1>
+    <p class="muted">Med ett eget lösenord kan du logga in direkt på vilken enhet som helst — utan att vänta på mejl.</p>
+    <form id="form-setpass">
+      <label for="setpass-1">Nytt lösenord (minst 8 tecken)</label>
+      <input type="password" id="setpass-1" required minlength="8" autocomplete="new-password">
+      <label for="setpass-2">Upprepa lösenordet</label>
+      <input type="password" id="setpass-2" required minlength="8" autocomplete="new-password">
+      <button type="submit" class="btn btn-primary">Spara lösenord</button>
+    </form>
+    <p id="setpass-status" class="status-note" hidden></p>
+    <button id="btn-setpass-back" class="btn btn-ghost">Hoppa över</button>
+  </div>
+</div>
+
 <div id="view-app" class="view" hidden>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">OakStride</span> <span class="brand-sub">Portal</span></div>
@@ -73,6 +101,7 @@
     <div class="user-box">
       <span id="user-email" class="user-email"></span>
       <button id="btn-viewas" class="btn btn-ghost btn-sm" hidden>Visa som kund</button>
+      <button id="btn-passwd" class="btn btn-ghost btn-sm">Lösenord</button>
       <button id="btn-logout" class="btn btn-ghost btn-sm">Logga ut</button>
     </div>
   </header>
@@ -83,7 +112,7 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="config.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

@@ -75,6 +75,8 @@ form .btn{margin-top:1rem}
 .status-note{margin-top:.85rem;font-size:.9rem;color:var(--moss);background:var(--birch);border-radius:8px;padding:.6rem .8rem}
 .status-note.error{color:var(--danger);background:#f7ece8}
 .fineprint{margin-top:1.25rem;font-size:.8rem;color:#8a918a}
+.linklike{background:none;border:none;padding:0;font:inherit;font-size:.8rem;color:var(--acorn);cursor:pointer}
+.linklike:hover{text-decoration:underline}
 .form-row{margin:1.25rem 0;padding-top:.5rem;border-top:1px solid var(--line)}
 
 .topbar{

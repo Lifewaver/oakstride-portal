@@ -9,6 +9,7 @@
     config: document.getElementById("view-config"),
     login: document.getElementById("view-login"),
     pending: document.getElementById("view-pending"),
+    setpass: document.getElementById("view-setpass"),
     app: document.getElementById("view-app")
   };
   var main = document.getElementById("app-main");
@@ -83,9 +84,10 @@
 
   sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
 
-  sb.auth.onAuthStateChange(function (_event, s) {
+  sb.auth.onAuthStateChange(function (event, s) {
     var had = !!session;
     session = s;
+    if (event === "PASSWORD_RECOVERY") { show("setpass"); return; }
     if (!s && had) show("login");
   });
 
@@ -102,6 +104,11 @@
       if (!profile) {
         // Trigger hann inte skapa profilen ännu — försök igen strax.
         setTimeout(loadProfileAndRoute, 1200);
+        return;
+      }
+      // Första inloggningen: föreslå att sätta ett eget lösenord
+      if (!localStorage.getItem("oak_pw_" + session.user.id)) {
+        show("setpass");
         return;
       }
       if (!profile.approved && !profile.is_admin) {
@@ -129,11 +136,58 @@
     });
   });
 
+  document.getElementById("form-password").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var note = document.getElementById("magic-status");
+    var btn = e.target.querySelector("button[type=submit]");
+    btn.disabled = true;
+    sb.auth.signInWithPassword({
+      email: document.getElementById("login-email").value.trim(),
+      password: document.getElementById("login-pass").value
+    }).then(function (res) {
+      btn.disabled = false;
+      if (res.error) {
+        note.hidden = false;
+        note.className = "status-note error";
+        note.textContent = "Inloggningen misslyckades. Har du inget lösenord ännu? Använd \"Glömt lösenordet?\" eller engångslänken nedan.";
+        return;
+      }
+      show("loading");
+      loadProfileAndRoute();
+    });
+  });
+
+  document.getElementById("btn-forgot").addEventListener("click", function () {
+    var email = document.getElementById("login-email").value.trim();
+    var note = document.getElementById("magic-status");
+    note.hidden = false;
+    if (!email) {
+      note.className = "status-note error";
+      note.textContent = "Fyll i din e-postadress ovan först, klicka sedan på Glömt lösenordet igen.";
+      return;
+    }
+    sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    }).then(function (res) {
+      note.className = res.error ? "status-note error" : "status-note";
+      note.textContent = res.error
+        ? "Kunde inte skicka: " + res.error.message
+        : "Klart! Kolla din inkorg (" + email + ") — länken låter dig välja ett nytt lösenord.";
+    });
+  });
+
+  document.getElementById("btn-magic-mode").addEventListener("click", function () {
+    var f = document.getElementById("form-magic");
+    f.hidden = !f.hidden;
+    if (!f.hidden) document.getElementById("magic-email").value = document.getElementById("login-email").value;
+  });
+
   document.getElementById("form-magic").addEventListener("submit", function (e) {
     e.preventDefault();
     var email = document.getElementById("magic-email").value.trim();
     var note = document.getElementById("magic-status");
     var btn = e.target.querySelector("button");
+    if (!email) return;
     btn.disabled = true;
     sb.auth.signInWithOtp({
       email: email,
@@ -156,6 +210,46 @@
     this.textContent = viewAsCustomer ? "Tillbaka till admin" : "Visa som kund";
     document.getElementById("admin-nav").hidden = viewAsCustomer || !profile.is_admin;
     if (viewAsCustomer) renderCustomer(); else renderAdmin();
+  });
+
+  document.getElementById("form-setpass").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var p1 = document.getElementById("setpass-1").value;
+    var p2 = document.getElementById("setpass-2").value;
+    var note = document.getElementById("setpass-status");
+    note.hidden = false;
+    if (p1 !== p2) {
+      note.className = "status-note error";
+      note.textContent = "Lösenorden matchar inte.";
+      return;
+    }
+    sb.auth.updateUser({ password: p1 }).then(function (res) {
+      if (res.error) {
+        note.className = "status-note error";
+        note.textContent = "Kunde inte spara: " + res.error.message;
+        return;
+      }
+      if (session) localStorage.setItem("oak_pw_" + session.user.id, "1");
+      note.className = "status-note";
+      note.textContent = "Lösenordet är sparat!";
+      show("loading");
+      loadProfileAndRoute();
+    });
+  });
+
+  document.getElementById("btn-setpass-back").addEventListener("click", function () {
+    if (session) {
+      localStorage.setItem("oak_pw_" + session.user.id, "1");
+      show("loading");
+      loadProfileAndRoute();
+    } else {
+      show("login");
+    }
+  });
+
+  document.getElementById("btn-passwd").addEventListener("click", function () {
+    document.getElementById("setpass-status").hidden = true;
+    show("setpass");
   });
 
   document.getElementById("btn-logout").addEventListener("click", signOut);
