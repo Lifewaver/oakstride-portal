@@ -142,57 +142,75 @@ create policy "comments: skriv i egna ärenden eller admin" on public.request_co
     )
   );
 
--- ---------- Mejlaviseringar via Make-webhook ----------
--- Ersätt MAKE_WEBHOOK_URL innan du kör (görs automatiskt i setup-flödet).
+-- ---------- Mejlaviseringar via Resend ----------
+-- Kräver: (1) Resend-konto med oakstride.se verifierad, (2) API-nyckeln sparad i
+-- Supabase Vault:  select vault.create_secret('re_XXXX', 'resend_api_key');
 
-create or replace function public.notify_make()
+create or replace function public.esc_html(t text)
+returns text language sql immutable as $$
+  select replace(replace(replace(coalesce(t, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
+$$;
+
+create or replace function public.notify_email()
 returns trigger
 language plpgsql security definer set search_path = public
 as $$
 declare
   payload jsonb;
   who record;
+  api_key text;
+  subj text;
+  html text;
 begin
+  select decrypted_secret into api_key
+    from vault.decrypted_secrets where name = 'resend_api_key';
+  if api_key is null then
+    return new; -- ingen nyckel konfigurerad ännu → hoppa tyst över avisering
+  end if;
+
   if tg_table_name = 'requests' then
     select email, full_name, company into who from public.profiles where id = new.user_id;
-    payload := jsonb_build_object(
-      'event', 'new_request',
-      'request_id', new.id,
-      'title', new.title,
-      'description', new.description,
-      'page_url', new.page_url,
-      'priority', new.priority,
-      'customer_email', who.email,
-      'customer_name', who.full_name,
-      'customer_company', who.company
-    );
+    subj := 'Nytt ärende #' || new.id || ': ' || new.title;
+    html := '<h2>Nytt ärende i portalen</h2>'
+      || '<p><strong>Kund:</strong> ' || public.esc_html(coalesce(who.full_name, who.email))
+      || coalesce(' (' || public.esc_html(who.company) || ')', '') || '<br>'
+      || '<strong>Prioritet:</strong> ' || public.esc_html(new.priority)
+      || coalesce('<br><strong>Sida:</strong> ' || public.esc_html(new.page_url), '') || '</p>'
+      || '<p style="white-space:pre-wrap">' || public.esc_html(new.description) || '</p>'
+      || '<p><a href="https://portal.oakstride.se">Öppna portalen</a></p>';
   elsif tg_table_name = 'profiles' then
-    payload := jsonb_build_object(
-      'event', 'new_signup',
-      'email', new.email,
-      'name', new.full_name
-    );
+    subj := 'Ny registrering i portalen: ' || new.email;
+    html := '<h2>Nytt konto väntar på godkännande</h2>'
+      || '<p>' || public.esc_html(new.full_name) || ' &lt;' || public.esc_html(new.email) || '&gt;</p>'
+      || '<p><a href="https://portal.oakstride.se">Godkänn i portalen</a></p>';
   elsif tg_table_name = 'request_comments' then
-    select p.email, p.full_name, p.company into who
-      from public.profiles p where p.id = new.author_id;
     -- Avisera bara när KUNDEN skriver (inte när admin svarar)
     if (select is_admin from public.profiles where id = new.author_id) then
       return new;
     end if;
-    payload := jsonb_build_object(
-      'event', 'new_comment',
-      'request_id', new.request_id,
-      'body', new.body,
-      'customer_email', who.email,
-      'customer_name', who.full_name
-    );
+    select p.email, p.full_name into who
+      from public.profiles p where p.id = new.author_id;
+    subj := 'Nytt svar på ärende #' || new.request_id || ' från ' || coalesce(who.full_name, who.email);
+    html := '<h2>Ny kommentar från kund</h2>'
+      || '<p style="white-space:pre-wrap">' || public.esc_html(new.body) || '</p>'
+      || '<p><a href="https://portal.oakstride.se">Svara i portalen</a></p>';
   end if;
+
+  payload := jsonb_build_object(
+    'from', 'OakStride Portal <portal@oakstride.se>',
+    'to', jsonb_build_array('info@oakstride.se'),
+    'subject', subj,
+    'html', html
+  );
 
   begin
     perform net.http_post(
-      url := 'MAKE_WEBHOOK_URL',
+      url := 'https://api.resend.com/emails',
       body := payload,
-      headers := '{"Content-Type": "application/json"}'::jsonb
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || api_key
+      )
     );
   exception when others then
     null; -- aviseringsfel får aldrig blockera själva ärendet
@@ -202,11 +220,11 @@ end;
 $$;
 
 create trigger notify_new_request after insert on public.requests
-  for each row execute function public.notify_make();
+  for each row execute function public.notify_email();
 create trigger notify_new_signup after insert on public.profiles
-  for each row execute function public.notify_make();
+  for each row execute function public.notify_email();
 create trigger notify_new_comment after insert on public.request_comments
-  for each row execute function public.notify_make();
+  for each row execute function public.notify_email();
 
 -- ---------- Admin-konto ----------
 -- Kör EFTER att Fredrik loggat in första gången i portalen:
