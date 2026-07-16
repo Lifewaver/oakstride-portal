@@ -1,7 +1,7 @@
 -- OakStride Portal — databas-schema för Supabase
 -- Körs i Supabase SQL Editor. Idempotent nog att köras en gång per projekt.
 
--- Behövs för mejlaviseringar (HTTP-anrop till Make-webhook från databasen)
+-- Behövs för mejlaviseringar (HTTP-anrop till Resend från databasen)
 create extension if not exists pg_net;
 
 -- ---------- Tabeller ----------
@@ -148,7 +148,7 @@ create policy "comments: skriv i egna ärenden eller admin" on public.request_co
 
 create or replace function public.esc_html(t text)
 returns text language sql immutable as $$
-  select replace(replace(replace(coalesce(t, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
+  select replace(replace(replace(t, '&', '&amp;'), '<', '&lt;'), '>', '&gt;')
 $$;
 
 create or replace function public.notify_email()
@@ -181,7 +181,7 @@ begin
   elsif tg_table_name = 'profiles' then
     subj := 'Ny registrering i portalen: ' || new.email;
     html := '<h2>Nytt konto väntar på godkännande</h2>'
-      || '<p>' || public.esc_html(new.full_name) || ' &lt;' || public.esc_html(new.email) || '&gt;</p>'
+      || '<p>' || coalesce(public.esc_html(new.full_name), '') || ' &lt;' || public.esc_html(new.email) || '&gt;</p>'
       || '<p><a href="https://portal.oakstride.se">Godkänn i portalen</a></p>';
   elsif tg_table_name = 'request_comments' then
     -- Avisera bara när KUNDEN skriver (inte när admin svarar)
