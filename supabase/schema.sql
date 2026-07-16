@@ -73,7 +73,9 @@ returns trigger
 language plpgsql security definer set search_path = public
 as $$
 begin
-  if not public.is_admin() then
+  -- Skydda kolumnerna för inloggade API-användare som inte är admin.
+  -- Direkta DB-anslutningar (auth.uid() is null) går ändå förbi RLS och är betrodda.
+  if auth.uid() is not null and not public.is_admin() then
     new.approved := old.approved;
     new.is_admin := old.is_admin;
     new.website  := old.website;
