@@ -16,12 +16,18 @@
   var STATUS_LABELS = {
     new: "Ny",
     in_progress: "Pågående",
+    questions: "Frågor till dig",
+    draft_ready: "Förslag klart — granska",
+    approved: "Godkänt",
     waiting_customer: "Väntar på dig",
     done: "Klar"
   };
   var STATUS_LABELS_ADMIN = {
     new: "Ny",
     in_progress: "Pågående",
+    questions: "Väntar på kundsvar",
+    draft_ready: "Förslag klart",
+    approved: "Godkänt av kund",
     waiting_customer: "Väntar på kund",
     done: "Klar"
   };
@@ -275,6 +281,22 @@
         ? '<span><strong>Kund:</strong> ' + esc(r.owner.full_name || r.owner.email) +
           (r.owner.company ? " (" + esc(r.owner.company) + ")" : "") + "</span>"
         : "";
+      var previewBlock = "";
+      if (r.preview_url) {
+        previewBlock = '<div class="preview-box"><strong>Förhandsvisning:</strong> ' +
+          '<a href="' + esc(r.preview_url) + '" target="_blank" rel="noopener">' + esc(r.preview_url) + "</a></div>";
+      }
+      var approveBlock = "";
+      if (!isAdmin && r.status === "draft_ready") {
+        approveBlock =
+          '<div class="approve-box"><p><strong>Ditt förslag är klart!</strong> Titta på förhandsvisningen ovan. ' +
+          "Nöjd? Godkänn så publicerar vi. Vill du justera något — skriv i dialogen nedan så tar vi ett varv till.</p>" +
+          '<button id="btn-approve" class="btn btn-primary btn-inline">Godkänn förslaget</button></div>';
+      }
+      var agentBlock = "";
+      if (isAdmin && ["new", "in_progress", "waiting_customer"].indexOf(r.status) !== -1) {
+        agentBlock = '<button id="btn-agent" class="btn btn-primary btn-inline">🤖 Skicka till Claude</button>';
+      }
       main.innerHTML =
         '<button class="back-link" id="btn-back">&larr; Tillbaka</button>' +
         '<div class="card detail-card">' +
@@ -284,11 +306,14 @@
         (r.page_url ? '<span><strong>Sida:</strong> ' + esc(r.page_url) + "</span>" : "") +
         ownerLine + "</div>" +
         '<div class="detail-desc">' + esc(r.description) + "</div>" +
+        previewBlock + approveBlock + agentBlock +
         "</div>" +
         '<div class="card"><h2>Dialog</h2><div id="comments">' +
         (comments.length ? comments.map(function (c) {
-          var who = c.author ? (c.author.full_name || c.author.email) : "Okänd";
-          return '<div class="comment' + (c.author && c.author.is_admin ? " admin" : "") + '">' +
+          var isClaude = !c.author_id;
+          var who = isClaude ? (c.author_label || "Claude") : (c.author ? (c.author.full_name || c.author.email) : "Okänd");
+          var cls = isClaude ? " claude" : (c.author && c.author.is_admin ? " admin" : "");
+          return '<div class="comment' + cls + '">' +
             '<div class="comment-head"><span class="who">' + esc(who) + "</span> · " + fmtDate(c.created_at) + "</div>" +
             '<div class="comment-body">' + esc(c.body) + "</div></div>";
         }).join("") : '<p class="muted">Inga meddelanden ännu.</p>') +
@@ -298,6 +323,32 @@
         '<button type="submit" class="btn btn-primary btn-inline">Skicka</button></form></div>';
 
       document.getElementById("btn-back").addEventListener("click", function () { isAdmin ? renderAdmin() : renderCustomer(); });
+
+      var btnApprove = document.getElementById("btn-approve");
+      if (btnApprove) {
+        btnApprove.addEventListener("click", function () {
+          btnApprove.disabled = true;
+          sb.from("requests").update({ status: "approved" }).eq("id", id).then(function (res) {
+            if (res.error) { toast("Kunde inte godkänna: " + res.error.message, true); btnApprove.disabled = false; return; }
+            toast("Tack! Förslaget är godkänt — vi publicerar inom kort.");
+            renderDetail(id, isAdmin);
+          });
+        });
+      }
+
+      var btnAgent = document.getElementById("btn-agent");
+      if (btnAgent) {
+        btnAgent.addEventListener("click", function () {
+          btnAgent.disabled = true;
+          sb.from("agent_jobs").insert({ request_id: id, reason: "draft" }).then(function (res) {
+            if (res.error) { toast("Kunde inte starta Claude: " + res.error.message, true); btnAgent.disabled = false; return; }
+            sb.from("requests").update({ status: "in_progress" }).eq("id", id).then(function () {
+              toast("Skickat till Claude — utkast eller frågor dyker upp i dialogen.");
+              renderDetail(id, isAdmin);
+            });
+          });
+        });
+      }
 
       if (isAdmin) {
         document.getElementById("d-status").addEventListener("change", function (e) {
@@ -350,12 +401,13 @@
       if (res.error) { box.innerHTML = '<div class="empty">' + esc(res.error.message) + "</div>"; return; }
       var rows = (res.data || []).filter(function (p) { return !p.is_admin; });
       if (!rows.length) { box.innerHTML = '<div class="empty">Inga kundkonton ännu.</div>'; return; }
-      box.innerHTML = '<table class="table"><thead><tr><th>Kund</th><th>Företag</th><th>Hemsida</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
+      box.innerHTML = '<table class="table"><thead><tr><th>Kund</th><th>Hemsida</th><th>GitHub-repo</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
         rows.map(function (p) {
           return "<tr data-id='" + esc(p.id) + "'>" +
-            "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span></td>" +
-            "<td>" + esc(p.company || "—") + "</td>" +
+            "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
+            (p.company ? "<br>" + esc(p.company) : "") + "</td>" +
             '<td><input type="text" class="inp-site" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></td>' +
+            '<td><input type="text" class="inp-repo" value="' + esc(p.github_repo || "") + '" placeholder="ägare/repo"></td>' +
             "<td>" + fmtDate(p.created_at) + "</td>" +
             '<td><button class="btn btn-sm btn-inline ' + (p.approved ? "btn-google" : "btn-primary") + ' btn-approve">' +
             (p.approved ? "Stäng av" : "Godkänn") + "</button></td></tr>";
@@ -373,6 +425,12 @@
           sb.from("profiles").update({ website: e.target.value.trim() || null }).eq("id", pid).then(function (res2) {
             if (res2.error) toast("Kunde inte spara hemsida: " + res2.error.message, true);
             else toast("Hemsida sparad.");
+          });
+        });
+        tr.querySelector(".inp-repo").addEventListener("change", function (e) {
+          sb.from("profiles").update({ github_repo: e.target.value.trim() || null }).eq("id", pid).then(function (res2) {
+            if (res2.error) toast("Kunde inte spara repo: " + res2.error.message, true);
+            else toast("GitHub-repo sparat.");
           });
         });
       });

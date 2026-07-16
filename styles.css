@@ -114,6 +114,9 @@ form .btn{margin-top:1rem}
 }
 .chip-new{background:#e3ecf3;color:var(--acorn)}
 .chip-in_progress{background:#e6efe9;color:var(--moss)}
+.chip-questions{background:#f6efdd;color:#8a6d1f}
+.chip-draft_ready{background:#e3ecf3;color:var(--acorn);outline:1px solid var(--acorn)}
+.chip-approved{background:#e6efe9;color:var(--pine);outline:1px solid var(--moss)}
 .chip-waiting_customer{background:#f6efdd;color:#8a6d1f}
 .chip-done{background:var(--birch);color:#5b635a}
 .chip-prio-high{background:#f7ece8;color:var(--danger)}
@@ -128,6 +131,19 @@ form .btn{margin-top:1rem}
 .comment-head .who{color:var(--pine);font-weight:600;font-family:'IBM Plex Sans',sans-serif}
 .comment-body{white-space:pre-wrap;font-size:.95rem}
 .comment.admin .who::after{content:" · OakStride";color:var(--moss);font-weight:400}
+.comment.claude{background:var(--paper);border-radius:10px;padding:.85rem;border:1px solid var(--line);border-top:1px solid var(--line)}
+.comment.claude .who{color:var(--acorn)}
+.comment.claude .who::before{content:"🤖 "}
+
+.preview-box{
+  margin:.75rem 0;padding:.8rem 1rem;background:#e3ecf3;border-radius:10px;
+  font-size:.95rem;word-break:break-all;
+}
+.approve-box{
+  margin:.75rem 0;padding:1rem;background:var(--birch);border-radius:10px;
+  border:1px solid var(--moss);
+}
+.approve-box p{margin-bottom:.75rem;font-size:.95rem}
 
 .empty{
   text-align:center;padding:3rem 1rem;color:#8a918a;background:#fff;
