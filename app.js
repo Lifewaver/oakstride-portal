@@ -326,6 +326,7 @@
         '<div class="stat-row">' +
         '<div class="stat"><div class="stat-num">' + (s.total_7 || 0) + '</div><div class="stat-label">besök, 7 dagar</div></div>' +
         '<div class="stat"><div class="stat-num">' + (s.total_30 || 0) + '</div><div class="stat-label">besök, 30 dagar</div></div>' +
+        (s.uniq_30 ? '<div class="stat"><div class="stat-num">' + s.uniq_30 + '</div><div class="stat-label">unika, 30 dagar</div></div>' : "") +
         "</div>" +
         '<div class="bars" aria-label="Besök per dag, senaste 14 dagarna">' + bars + "</div>" +
         ((s.top_pages && s.top_pages.length)

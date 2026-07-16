@@ -11,6 +11,7 @@ create table public.page_views (
   site text not null,
   path text not null default '/',
   referrer text,
+  vid text, -- frivilligt besökar-ID (cookie, endast med samtycke)
   created_at timestamptz not null default now()
 );
 create index page_views_site_time on public.page_views (site, created_at);
@@ -24,6 +25,7 @@ create policy "page_views: öppen insert" on public.page_views
     char_length(site) between 3 and 100
     and char_length(path) between 1 and 300
     and (referrer is null or char_length(referrer) <= 300)
+    and (vid is null or char_length(vid) <= 64)
   );
 
 create or replace function public.normalize_page_view()
@@ -58,6 +60,7 @@ begin
   return jsonb_build_object(
     'total_7',  (select count(*) from public.page_views where site = host and created_at > now() - interval '7 days'),
     'total_30', (select count(*) from public.page_views where site = host and created_at > now() - interval '30 days'),
+    'uniq_30',  (select count(distinct vid) from public.page_views where site = host and vid is not null and created_at > now() - interval '30 days'),
     'daily', (
       select coalesce(jsonb_agg(jsonb_build_object('d', to_char(d, 'YYYY-MM-DD'), 'c', c) order by d), '[]'::jsonb)
       from (
