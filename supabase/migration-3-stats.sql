@@ -85,3 +85,8 @@ end $$;
 -- Koppla Fredriks profil till oakstride.se så statistiken syns för honom
 update public.profiles set website = 'oakstride.se'
   where email = 'fredrik@oakstride.se' and website is null;
+
+-- Migration 4 (körd 2026-07-17): samtyckeslogg för cookie + integritetspolicy
+-- create table public.consents (id bigint generated always as identity primary key,
+--   vid text not null, policy_version text not null, created_at timestamptz not null default now());
+-- + RLS: endast insert (anon/authenticated), ingen läsning via API.
