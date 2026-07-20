@@ -183,55 +183,32 @@
       document.getElementById("admin-nav").hidden = !profile.is_admin;
       document.getElementById("btn-viewas").hidden = !profile.is_admin;
       show("app");
-      // Admin (och admin i "visa som kund"-läge) hoppar över godkännandegrinden.
+      // Admin (och admin i "visa som kund"-läge) visar admin/kundvy direkt.
       if (profile.is_admin) { if (viewAsCustomer) renderCustomer(); else renderAdmin(); return; }
-      requireAgreement(renderCustomer);
+      // Kunder släpps in direkt; villkoren godkänns inuti uppstartsflödet (se loadOnboarding).
+      renderCustomer();
     });
   }
 
-  // ---------- Avtalsgodkännande ----------
+  // ---------- Villkorsgodkännande (inuti flödet) ----------
 
-  function requireAgreement(next) {
-    sb.from("agreement_acceptances").select("id")
-      .eq("user_id", session.user.id).eq("agreement_version", AGREEMENT.version)
-      .maybeSingle().then(function (res) {
-        if (res.data) { next(); return; }        // redan godkänt aktuell version
-        renderAgreementGate(next);
-      });
-  }
-
-  function renderAgreementGate(next) {
-    main.innerHTML =
-      '<div class="card agreement-card">' +
-      "<h1>Innan vi sätter igång</h1>" +
-      '<p class="muted">För att använda portalen behöver du godkänna OakStrides kundvillkor. Läs igenom dem nedan.</p>' +
-      '<div class="agreement-box">' + AGREEMENT.html + "</div>" +
-      '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + ").</span></label>" +
-      '<button id="btn-agree" class="btn btn-primary" disabled>Godkänn avtal</button>' +
-      '<p id="agree-status" class="status-note" hidden></p></div>';
-    var cbEl = document.getElementById("agree-cb");
-    var btn = document.getElementById("btn-agree");
-    cbEl.addEventListener("change", function () { btn.disabled = !cbEl.checked; });
-    btn.addEventListener("click", function () {
-      btn.disabled = true;
-      sha256Hex(AGREEMENT.version + "\n" + AGREEMENT.html).then(function (hash) {
-        sb.from("agreement_acceptances").insert({
-          user_id: session.user.id,
-          agreement_version: AGREEMENT.version,
-          document_title: AGREEMENT.title,
-          document_hash: hash,
-          user_agent: navigator.userAgent
-        }).then(function (res) {
-          if (res.error) {
-            if (res.error.code === "23505") { next(); return; } // redan godkänt → släpp in
-            var n = document.getElementById("agree-status");
-            n.hidden = false; n.className = "status-note error";
-            n.textContent = "Kunde inte spara godkännandet: " + res.error.message;
-            btn.disabled = false; return;
-          }
-          toast("Tack! Avtalet är godkänt.");
-          next();
-        });
+  function acceptTerms(btn) {
+    btn.disabled = true;
+    sha256Hex(AGREEMENT.version + "\n" + AGREEMENT.html).then(function (hash) {
+      sb.from("agreement_acceptances").insert({
+        user_id: session.user.id,
+        agreement_version: AGREEMENT.version,
+        document_title: AGREEMENT.title,
+        document_hash: hash,
+        user_agent: navigator.userAgent
+      }).then(function (res) {
+        if (res.error && res.error.code !== "23505") {
+          var n = document.getElementById("agree-status");
+          if (n) { n.hidden = false; n.className = "status-note error"; n.textContent = "Kunde inte spara: " + res.error.message; }
+          btn.disabled = false; return;
+        }
+        toast("Tack! Villkoren är godkända.");
+        loadOnboarding();
       });
     });
   }
@@ -420,12 +397,9 @@
       '<div id="req-list" class="req-list"><div class="spinner"></div></div></div>' +
       '<div class="card dash-contact"><h2>Behöver du hjälp?</h2>' +
       '<p class="muted">Vi finns ett mejl eller ett samtal bort — inga växlar, inga köer.</p>' +
-      '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p>' +
-      '<p class="fineprint">Du har godkänt OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + "). " +
-      '<button class="linklike" id="btn-terms">Läs villkoren</button></p></div>';
+      '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
     document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
     document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
-    document.getElementById("btn-terms").addEventListener("click", function () { renderTermsView(renderCustomer); });
     loadRequests(false);
     loadStats(site);
     loadOnboarding();
@@ -434,15 +408,20 @@
   function loadOnboarding() {
     var box = document.getElementById("onboarding-box");
     if (!box) return;
-    sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at").then(function (res) {
+    Promise.all([
+      sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
+      sb.from("agreement_acceptances").select("id").eq("user_id", session.user.id)
+        .eq("agreement_version", AGREEMENT.version).maybeSingle()
+    ]).then(function (out) {
       if (!box.isConnected) return;
-      var addons = res.error ? [] : (res.data || []);
+      var addons = out[0].error ? [] : (out[0].data || []);
+      var accepted = !!(out[1] && out[1].data);
       var stage = profile.onboarding_stage || 1;
       var showSteps = stage < 7;
       var proposed = addons.filter(function (a) { return a.status === "proposed"; });
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
-      if (!showSteps && !proposed.length && !ordered.length) { box.innerHTML = ""; return; }
       var html = "";
+
       if (showSteps) {
         html += '<div class="card onb-card"><h2>Så sätter vi upp din sida</h2>' +
           '<p class="muted">Här ser du var vi är i uppstarten. Vid steg 5 tar vi ställning till eventuella tillägg tillsammans.</p>' +
@@ -451,10 +430,26 @@
             return '<li class="' + cls + '"><span class="onb-dot">' + (n < stage ? "✓" : n) + "</span><span>" + esc(s) + "</span></li>";
           }).join("") + "</ol></div>";
       }
+
+      // Villkoren godkänns HÄR, inuti flödet — inte som en vägg innan man kommer in.
+      if (accepted) {
+        html += '<div class="card onb-card onb-terms-ok"><span class="chip chip-approved">✓ Villkor godkända</span> ' +
+          '<span class="muted">Du har godkänt OakStrides kundvillkor (v ' + esc(AGREEMENT.version) + "). </span>" +
+          '<button class="linklike" id="btn-terms">Läs villkoren</button></div>';
+      } else {
+        html += '<div class="card onb-card"><h2>Godkänn villkoren</h2>' +
+          '<p class="muted">När du sett hur vi jobbar ovan — läs igenom och godkänn våra kundvillkor så kör vi igång. Du behöver godkänna innan du beställer tillägg.</p>' +
+          '<div class="agreement-box">' + AGREEMENT.html + "</div>" +
+          '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + ").</span></label>" +
+          '<button id="btn-agree" class="btn btn-primary" disabled>Godkänn villkoren</button>' +
+          '<p id="agree-status" class="status-note" hidden></p></div>';
+      }
+
       if (proposed.length) {
         html += '<div class="card onb-card"><h2>Tillägg att ta ställning till</h2>' +
           '<p class="muted">Vi föreslår följande tillval till din sida. Beställ det du vill ha — du bekräftar priset här, inget dras utan ditt godkännande.</p>' +
-          proposed.map(function (a) { return addonRowHtml(a, true); }).join("") + "</div>";
+          (accepted ? "" : '<p class="status-note">Godkänn villkoren ovan för att kunna beställa.</p>') +
+          proposed.map(function (a) { return addonRowHtml(a, accepted); }).join("") + "</div>";
       }
       if (ordered.length) {
         var eng = 0, man = 0;
@@ -465,7 +460,19 @@
           (eng && man ? " · " : "") + (man ? "Löpande: " + fmtKr(man) + " kr/mån" : "") +
           " <span class=\"muted\">(exkl. moms)</span></p></div>";
       }
+
       box.innerHTML = html;
+
+      if (accepted) {
+        var bt = document.getElementById("btn-terms");
+        if (bt) bt.addEventListener("click", function () { renderTermsView(renderCustomer); });
+      } else {
+        var cb = document.getElementById("agree-cb"), ab = document.getElementById("btn-agree");
+        if (cb && ab) {
+          cb.addEventListener("change", function () { ab.disabled = !cb.checked; });
+          ab.addEventListener("click", function () { acceptTerms(ab); });
+        }
+      }
       Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
         btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
       });
