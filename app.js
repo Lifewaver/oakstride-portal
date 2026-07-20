@@ -43,37 +43,111 @@
   function buildAgreement(p) {
     var site = fmtKr(p.site_price), drift = fmtKr(p.drift_month), setup = fmtKr(p.rate_setup), change = fmtKr(p.rate_change);
     return {
-      version: "2026-07-21a-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
+      version: "2026-07-21b-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
       title: "OakStrides kundvillkor",
       html: [
-        "<h3>1. Om avtalet</h3>",
-        '<p>Dessa villkor gäller mellan OakStride AB ("OakStride") och dig som kund för design, byggnation och löpande omhändertagande av din webbplats. De kompletterar det kundavtal med bilagor som tecknats mellan parterna; vid motstridighet gäller det undertecknade avtalet.</p>',
-        "<h3>2. Standardwebbplats</h3>",
-        "<p>En Standardwebbplats levereras till fast pris och omfattar upp till fem (5) sidor, mallbaserad och mobilanpassad design med din logotyp och dina färger, grundläggande SEO, ett kontaktformulär, koppling av din domän och e-post, inläggning av innehåll som du levererar färdigt, tre (3) uppstartsmöten samt ett (1) korrekturvarv. Arbete utöver detta (t.ex. fler sidor, e-handel, inloggning, specialfunktioner, flerspråkighet eller formgivning från grunden) ingår inte och debiteras per timme.</p>",
-        "<h3>3. Priser (exkl. moms)</h3>",
+        "<h3>1. Om villkoren och avtalet</h3>",
+        '<p>Dessa villkor gäller mellan OakStride AB, org.nr enligt undertecknat avtal, Stockholm ("OakStride", "vi") och dig som kund ("Kunden", "du") för design, byggnation och löpande omhändertagande av din webbplats eller webbutik. Villkoren utgör tillsammans med det kundavtal och de bilagor som tecknats mellan parterna hela överenskommelsen. Vid motstridighet gäller handlingarna i följande ordning: (1) det undertecknade kundavtalet, (2) Bilaga 1 Uppstartsprojekt, (3) Bilaga 2 Löpande drift &amp; support, (4) Bilaga 3 Prislista, och därefter dessa portalvillkor. Din primära kanal för ändringsönskemål, support, statusuppdateringar, förhandsvisningar och godkännanden är den här kundportalen; brådskande fel kan även anmälas via e-post eller telefon enligt punkt 8.</p>',
+
+        "<h3>2. Vad vi levererar — Standardwebbplats</h3>",
+        "<p>En Standardwebbplats levereras till fast pris enligt punkt 10 och omfattar:</p>",
+        "<ul>" +
+        "<li>Upp till fem (5) sidor/vyer (t.ex. Start, Om oss, Tjänster, Kontakt + en valfri).</li>" +
+        "<li>Mallbaserad, responsiv design (mobilen först) anpassad med din logotyp, dina färger och typsnitt.</li>" +
+        "<li>Tre (3) uppstartsmöten samt ett (1) korrekturvarv.</li>" +
+        "<li>Grundläggande SEO: sidtitlar, metabeskrivningar, sitemap och snabb laddning.</li>" +
+        "<li>Ett (1) standardkontaktformulär.</li>" +
+        "<li>Koppling av din domän samt grundläggande e-postkoppling.</li>" +
+        "<li>Inläggning av text och bilder som du levererar färdiga enligt punkt 5.</li>" +
+        "<li>Publicering på din domän samt en kort genomgång (ca 30 min).</li>" +
+        "</ul>",
+
+        "<h3>3. Vad som inte ingår</h3>",
+        "<p>Följande ingår inte i Standardwebbplatsen utan offereras separat eller debiteras per timme enligt punkt 10, alltid efter ditt skriftliga godkännande: fler än fem (5) sidor/vyer; e-handel/webbutik, bokningssystem, inloggning eller medlemsfunktioner och andra specialfunktioner; flerspråkighet; copywriting från grunden, fotografering samt framtagning av logotyp/grafisk profil; ny design från grunden eller omtag efter godkänd designriktning; integrationer mot tredjepartssystem; migrering av omfattande befintligt innehåll; samt fler korrekturvarv än ett (1).</p>",
+
+        "<h3>4. Så går uppstarten till</h3>",
+        "<p>Uppstartsprojektet sker i tre steg: <strong>Prata</strong> — tre (3) uppstartsmöten där vi går igenom din verksamhet, dina mål, din målgrupp och designriktning. <strong>Bygg</strong> — du får en första version och designen finjusteras inom ett (1) korrekturvarv. <strong>Väx</strong> — vi lanserar på din domän, håller en kort genomgång och lämnar över till löpande drift enligt punkt 7.</p>",
+
+        "<h3>5. Ditt åtagande</h3>",
+        "<p>Du levererar texter, bilder, logotyp och eventuell produktdata i överenskommet format senast överenskommet datum, utser en kontaktperson med beslutsmandat och lämnar återkoppling inom fem (5) arbetsdagar. Försenat material eller försenad återkoppling förskjuter tidsplanen i motsvarande mån. Du ansvarar för att innehåll du levererar inte gör intrång i annans rätt.</p>",
+
+        "<h3>6. Leverans och acceptans</h3>",
+        "<p>När du har godkänt slutversionen — eller börjat använda webbplatsen kommersiellt — anses leveransen accepterad. Fel som du påtalar inom trettio (30) dagar efter lansering åtgärdas utan kostnad. Övriga justeringar efter lansering debiteras per timme enligt punkt 10.</p>",
+
+        "<h3>7. Löpande drift &amp; support</h3>",
+        "<p>Löpande drift är en enda nivå till fast månadsavgift enligt punkt 10 och omfattar hosting och övervakning, förnyelse av domän och DNS-skötsel, HTTPS-certifikat, plattforms- och säkerhetsuppdateringar, säkerhetskopiering av innehåll samt din personliga inloggning i kundportalen. <strong>Inga ändringar av webbplatsen ingår i driften</strong> — samtliga ändringsönskemål, stora som små, debiteras per timme enligt punkt 10. Support på system som inte levererats av OakStride samt tredjepartskostnader ingår inte.</p>",
+
+        "<h3>8. Servicenivåer</h3>",
+        "<p>Vi påbörjar åtgärd inom följande tider (vardagar 09–17):</p>",
+        "<ul>" +
+        "<li><strong>Webbplatsen helt nere:</strong> åtgärd påbörjas inom 4 timmar.</li>" +
+        "<li><strong>Allvarligt fel (viktig funktion ur spel):</strong> inom 1 arbetsdag.</li>" +
+        "<li><strong>Ändringsönskemål via portalen:</strong> påbörjas inom 3 arbetsdagar.</li>" +
+        "<li><strong>Svar på fråga i portalen:</strong> inom 1 arbetsdag.</li>" +
+        "</ul>",
+        "<p>Planerade servicefönster förläggs utanför kontorstid och aviseras i förväg när avbrott kan märkas.</p>",
+
+        "<h3>9. Så beställer du ändringar</h3>",
+        "<p>Ändringsönskemål lämnas i den här kundportalen. Du får en tidsuppskattning och, efter ditt godkännande, ett utkast med förhandsvisningslänk att granska. Ingenting publiceras på din webbplats utan ditt godkännande i portalen och vår slutkontroll. Nedlagd tid debiteras enligt punkt 10. Medför en ändring en ny engångskostnad presenteras den som en uppdaterad kravspecifikation som du godkänner innan arbetet påbörjas.</p>",
+
+        "<h3>10. Priser (exkl. moms)</h3>",
+        "<p>Samtliga priser anges exklusive moms.</p>",
         "<ul><li><strong>Standardwebbplats:</strong> " + site + " kr som engångskostnad, faktureras vid beställning.</li>" +
         "<li><strong>Löpande drift:</strong> " + drift + " kr/mån — hosting, DNS- och domänskötsel, certifikat, säkerhet, säkerhetskopiering och tillgång till kundportalen. Inga ändringar ingår i driften.</li>" +
         "<li><strong>Uppsättningsarbete utöver standardsidan:</strong> " + setup + " kr/timme (t.ex. e-postuppsättning eller specialfunktioner under bygget), enligt godkänd uppskattning.</li>" +
-        "<li><strong>Ändringar och löpande arbete efter lansering:</strong> " + change + " kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart.</li>" +
-        "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme (på din begäran).</li>" +
-        "<li><strong>Tredjepartskostnader:</strong> domänavgift, e-post (t.ex. Microsoft 365) och andra externa tjänster ingår inte utan betalas av dig till självkostnad — du kan även teckna dem själv.</li></ul>",
-        "<h3>4. Så beställer du ändringar</h3>",
-        "<p>Ändringsönskemål lämnas i den här kundportalen. Du får en tidsuppskattning och, efter ditt godkännande, ett utkast med förhandsvisning. Ingenting publiceras utan ditt godkännande. Nedlagd tid debiteras enligt punkt 3.</p>",
-        "<h3>5. Betalning</h3>",
-        "<p>Betalningsvillkor 20 dagar netto. Månadsavgiften för drift faktureras i förskott. Vid försenad betalning utgår dröjsmålsränta enligt räntelagen samt lagstadgad påminnelseavgift.</p>",
-        "<h3>6. Avtalstid och uppsägning</h3>",
-        "<p>Driften löper tills vidare med en (1) månads ömsesidig uppsägningstid. Uppstartsprojektet avslutas vid godkänd leverans.</p>",
-        "<h3>7. Du äger din sajt</h3>",
-        "<p>Efter full betalning äger du ditt innehåll och har obegränsad nyttjanderätt till den levererade webbplatsen. Vid uppsägning lämnar OakStride utan extra kostnad över en komplett kopia av webbplatsens filer och innehåll samt domänen — du är aldrig inlåst.</p>",
-        "<h3>8. Användning av AI</h3>",
-        "<p>OakStride använder AI-verktyg som stöd i arbetet. Alla utkast granskas av en människa innan publicering, och ditt material används inte för att träna AI-modeller.</p>",
-        "<h3>9. Personuppgifter</h3>",
-        "<p>Vardera parten ansvarar för sin egen behandling av personuppgifter. Behandlar OakStride personuppgifter för din räkning upprättas ett personuppgiftsbiträdesavtal.</p>",
-        "<h3>10. Ansvar</h3>",
-        "<p>OakStride utför tjänsterna fackmässigt. OakStride ansvarar inte för indirekt skada, och det sammanlagda ansvaret per tolvmånadersperiod är begränsat till de avgifter du betalat under samma period. Begränsningen gäller inte vid uppsåt eller grov vårdslöshet.</p>",
-        "<h3>11. Tvist</h3>",
+        "<li><strong>Ändringar och löpande arbete efter lansering:</strong> " + change + " kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart (15 min).</li>" +
+        "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme, minimum 1 timme (på din begäran).</li>" +
+        "<li><strong>Extra utbildningstillfälle:</strong> 1 500 kr per tillfälle.</li>" +
+        "<li><strong>Större projekt</strong> (webbutik, webbapp/community): offert baserad på timpriset ovan.</li>" +
+        "<li><strong>Tredjepartskostnader:</strong> domänavgift, e-post (t.ex. Microsoft 365 eller Google Workspace), betalväxel och andra externa tjänster ingår inte utan betalas av dig till självkostnad enligt punkt 12 — du kan även teckna dem själv.</li></ul>",
+
+        "<h3>11. Betalning och fakturering</h3>",
+        "<ul>" +
+        "<li>Standardwebbplatsen (fast pris) faktureras vid beställning.</li>" +
+        "<li>Löpande drift faktureras månadsvis i förskott.</li>" +
+        "<li>Timdebiterat arbete faktureras efter utfört arbete.</li>" +
+        "<li>Tredjepartskostnader enligt punkt 12 vidarefaktureras till självkostnad utan påslag, och beloppet meddelas alltid i förväg.</li>" +
+        "<li>Betalningsvillkor är 20 dagar netto. Faktura skickas elektroniskt till den faktureringsadress och fakturamejl du anger i portalen; du ansvarar för att uppgifterna hålls aktuella.</li>" +
+        "<li>Vid försenad betalning utgår dröjsmålsränta enligt räntelagen samt lagstadgad påminnelseavgift. Vid väsentligt betalningsdröjsmål får OakStride, efter skriftlig påminnelse, pausa löpande arbete och support tills betalning skett.</li>" +
+        "</ul>",
+
+        "<h3>12. Prisjustering</h3>",
+        "<p>Priserna får justeras årligen per den 1 januari med föregående års förändring i tjänsteprisindex (SCB), dock högst 5 %. Justering meddelas senast en (1) månad i förväg. Övriga prisändringar sker skriftligen enligt punkt 20.</p>",
+
+        "<h3>13. Tredjepartstjänster</h3>",
+        "<p>Vissa tjänster som webbplatsen är beroende av tillhandahålls av tredje part och ingår inte i OakStrides priser. Dit hör bl.a. domännamn (registrering och årlig förnyelse, ca 150–300 kr/år per domän), e-post (t.ex. Microsoft 365 eller Google Workspace, per brevlåda och månad), betalväxel för webbutik (t.ex. Stripe, Klarna eller Swish Handel), utökad drift/databas om webbplatsen kräver mer än standardhosting, valfria tjänster som boknings- och nyhetsbrevsverktyg samt licensierat innehåll (köpta typsnitt, stock-bilder eller video). Dessa betalas av dig — antingen genom att du tecknar och äger abonnemangen själv (rekommenderas), eller genom att OakStride vidarefakturerar dem till självkostnad. För tredjepartstjänsterna gäller respektive leverantörs egna villkor. HTTPS-certifikat och grundläggande webbtypsnitt ingår utan kostnad.</p>",
+
+        "<h3>14. Underleverantörer</h3>",
+        "<p>OakStride anlitar etablerade underleverantörer för bl.a. hosting, domän, e-post, datalagring och utskick (för närvarande bl.a. GitHub, Vercel, Supabase, Resend och Hostup; aktuell lista lämnas på begäran). OakStride ansvarar för underleverantörernas arbete som för sitt eget och väljer leverantörer med datalagring inom EU/EES där det är möjligt.</p>",
+
+        "<h3>15. Avtalstid och uppsägning</h3>",
+        "<p>Uppstartsprojektet avslutas vid godkänd leverans enligt punkt 6. Löpande drift &amp; support löper tills vidare och betalas månadsvis i förskott, med en (1) månads ömsesidig uppsägningstid. Uppsägning sker skriftligen (t.ex. via portalen eller e-post).</p>",
+
+        "<h3>16. Du äger din sajt — exit</h3>",
+        "<p>Efter full betalning äger du ditt innehåll (texter, bilder, varumärke, produktdata) och har obegränsad nyttjanderätt i tid till den levererade webbplatsen. Du är aldrig inlåst. Vid avtalets upphörande lämnar OakStride utan extra kostnad över en komplett kopia av webbplatsens filer och innehåll, domänen (registrerad i ditt namn eller överlåts till dig) samt rimlig dokumentation. Bistånd utöver detta debiteras per timme enligt punkt 10.</p>",
+
+        "<h3>17. Immateriella rättigheter</h3>",
+        "<p>OakStride behåller rätten till generella verktyg, kodkomponenter och arbetsmetoder och får återanvända dessa i andra uppdrag; detta påverkar inte din nyttjanderätt enligt punkt 16. OakStride får ange dig som referens med länk och skärmbilder om du inte skriftligen avböjer.</p>",
+
+        "<h3>18. Användning av AI</h3>",
+        "<p>OakStride använder AI-verktyg (bl.a. Anthropic Claude) som stöd i arbetet och för att ta fram utkast till ändringar. Alla AI-genererade utkast granskas av en människa innan publicering, och inga ändringar publiceras utan mänskligt godkännande. Ditt material används inte för att träna AI-modeller.</p>",
+
+        "<h3>19. Personuppgifter</h3>",
+        "<p>Vardera parten ansvarar som personuppgiftsansvarig för sin egen behandling. I den mån OakStride behandlar personuppgifter för din räkning (t.ex. kunddata i en webbutik) upprättas ett personuppgiftsbiträdesavtal som separat bilaga. OakStride behandlar kontaktuppgifter till din personal endast för att fullgöra avtalet.</p>",
+
+        "<h3>20. Ansvar och ansvarsbegränsning</h3>",
+        "<p>OakStride ansvarar för att tjänsterna utförs fackmässigt. OakStride ansvarar inte för indirekt skada såsom utebliven vinst eller förlust av data som beror på tredje parts tjänster. Det sammanlagda ansvaret per tolvmånadersperiod är begränsat till de avgifter du betalat under samma period. Begränsningen gäller inte vid uppsåt eller grov vårdslöshet.</p>",
+
+        "<h3>21. Force majeure</h3>",
+        "<p>Part befrias från påföljd om fullgörandet hindras av omständighet utanför partens rimliga kontroll, såsom avbrott hos tredjepartsleverantör, större internetstörning, myndighetsbeslut, arbetskonflikt eller naturhändelse.</p>",
+
+        "<h3>22. Ändringar av villkoren</h3>",
+        "<p>Ändringar av avtalet och dessa villkor ska ske skriftligen. Väsentliga ändringar av villkoren aviseras i förväg; fortsatt användning av tjänsten efter att en ändring trätt i kraft innebär att du accepterat den. Den vid var tid gällande versionen visas i portalen.</p>",
+
+        "<h3>23. Tvist och tillämplig lag</h3>",
         "<p>Svensk rätt tillämpas. Tvist avgörs av svensk allmän domstol med Stockholms tingsrätt som första instans.</p>",
-        '<p class="fineprint">Genom att godkänna bekräftar du att du har behörighet att ingå avtalet för kundens räkning och att du läst och accepterat dessa villkor. Godkännandet loggas med tidpunkt och en kontrollsumma av villkorstexten, och en bekräftelse skickas till din e-post.</p>'
+
+        '<p class="fineprint">Genom att godkänna bekräftar du att du har behörighet att ingå avtalet för kundens räkning och att du läst och accepterat dessa villkor. Godkännandet loggas med tidpunkt och en kontrollsumma (SHA-256) av villkorstexten, och en bekräftelse skickas till din e-post.</p>'
       ].join("")
     };
   }
