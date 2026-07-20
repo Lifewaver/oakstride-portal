@@ -107,6 +107,7 @@
     { key: "funktioner", title: "Funktioner" },
     { key: "innehall", title: "Innehåll" },
     { key: "drift", title: "Domän, e-post & drift" },
+    { key: "fortydliganden", title: "Förtydliganden & ändringar" },
     { key: "ovrigt", title: "Övriga noteringar" }
   ];
   function specItem(text, extra) { return { text: text, tier: extra ? "extra" : "standard" }; }
@@ -504,6 +505,8 @@
       function isDone(n) { return n === 1 ? !!brief : !!done[n]; }
       function doneDate(n) { return n === 1 ? (brief && brief.created_at) : done[n]; }
       function contentReady(n) { var c = content[n]; return n === 5 ? !!(c && (c.link || c.body)) : !!(c && c.body); }
+      // Steg 3 & 4 (kravbild) är redo när en kravspec finns; steg 5 (utkast) när utkastet lagts upp.
+      function stepReady(n) { return (n === 3 || n === 4) ? !!spec : (n === 5 ? contentReady(5) : true); }
 
       var current = 0;
       for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!isDone(k)) { current = k; break; } }
@@ -531,32 +534,49 @@
               : '<p class="muted">Vi hittar ingen projektförfrågan på din e-post ännu. Fyllde du i formuläret på oakstride.se? Hör av dig till info@oakstride.se så hjälper vi dig.</p>';
           }
 
-          if (s.content) {
-            var c = content[n];
-            if (contentReady(n)) {
-              if (c.body) body += '<div class="onb-content-block">' + esc(c.body).replace(/\n/g, "<br>") + "</div>";
-              if (s.link && c.link) {
-                var url = /^https?:\/\//.test(c.link) ? c.link : "https://" + c.link;
-                body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(url) + '" target="_blank" rel="noopener">Öppna utkastet &#8599;</a></p>';
+          // Steg 3 & 4: kravbilden ÄR kravspecifikationen (visas i panelen längre ned).
+          if (n === 3 || n === 4) {
+            if (spec) {
+              if (n === 3 && content[3] && content[3].body) {
+                body += '<div class="onb-content-block"><strong>Sammanfattning från uppstartsmötet</strong>' + esc(content[3].body).replace(/\n/g, "<br>") + "</div>";
+              }
+              body += '<p class="muted">Din kravbild finns samlad i <strong>kravspecifikationen</strong> längre ned (version ' + spec.version + "). " +
+                (n === 3
+                  ? "Läs igenom och verifiera att allt stämmer. Vill du förtydliga eller ändra något — per sida eller för hela siten — gör du det här:"
+                  : "När kravbilden är komplett och rätt godkänner du den här.") + "</p>";
+              if (n === 3) {
+                var pages = (((spec.data || {}).sections || {}).sidor || []).map(function (i) { return i.text; });
+                var opts = '<option value="Hela siten">Hela siten</option>' + pages.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + "</option>"; }).join("");
+                body += '<div class="onb-clar"><label for="clar-scope">Förtydliga eller ändra kravbilden</label>' +
+                  '<div class="onb-clar-row"><span class="onb-clar-lbl">Gäller:</span><select id="clar-scope">' + opts + "</select></div>" +
+                  '<textarea id="clar-text" rows="3" placeholder="Beskriv vad du vill förtydliga eller ändra..."></textarea>' +
+                  '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-clar="1">Skicka förtydligande</button>' +
+                  '<span class="muted onb-clar-hint">Dokumenteras i kravspecifikationen som en ny version.</span></div></div>';
               }
             } else {
-              body += '<p class="muted">Materialet läggs upp av OakStride så snart det är klart. Du får ett mejl när det är dags att verifiera.</p>';
+              body += '<p class="muted">Kravbilden sammanställs av OakStride efter uppstartsmötet. Du får ett mejl när den är redo att verifiera.</p>';
             }
           }
 
-          if (s.note && contentReady(n)) {
-            var nt = notes[n] ? (notes[n].body || "") : "";
-            body += '<div class="onb-note"><label for="note' + n + '">Dina kompletteringar eller ändringar</label>' +
-              '<textarea id="note' + n + '" rows="4" placeholder="Skriv här om du vill komplettera eller ändra något i sammanfattningen...">' + esc(nt) + "</textarea>" +
-              '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-note="' + n + '">Spara kompletteringar</button>' +
-              (notes[n] && notes[n].updated_at ? '<span class="muted onb-note-saved">Sparat ' + fmtDate(notes[n].updated_at) + "</span>" : "") + "</div></div>";
+          // Steg 5: utkast att granska.
+          if (n === 5) {
+            if (contentReady(5)) {
+              var c5 = content[5];
+              if (c5.body) body += '<div class="onb-content-block">' + esc(c5.body).replace(/\n/g, "<br>") + "</div>";
+              if (c5.link) {
+                var url5 = /^https?:\/\//.test(c5.link) ? c5.link : "https://" + c5.link;
+                body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(url5) + '" target="_blank" rel="noopener">Öppna utkastet &#8599;</a></p>';
+              }
+            } else {
+              body += '<p class="muted">Utkastet läggs upp av OakStride så snart det är byggt. Du får ett mejl när det är dags att granska.</p>';
+            }
           }
 
           if (dn) {
             if (n !== 1) body += '<p class="onb-verified">✓ Verifierat ' + fmtDate(doneDate(n)) + "</p>";
           } else if (cur && n !== 1) {
-            if (s.content && !contentReady(n)) {
-              body += '<p class="status-note">Blir tillgängligt när OakStride lagt upp materialet.</p>';
+            if (s.content && !stepReady(n)) {
+              body += '<p class="status-note">Blir tillgängligt när OakStride lagt upp kravbilden/utkastet.</p>';
             } else {
               body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
             }
@@ -625,11 +645,11 @@
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
       });
-      Array.prototype.forEach.call(box.querySelectorAll("[data-note]"), function (btn) {
-        btn.addEventListener("click", function () {
-          var n = Number(btn.getAttribute("data-note"));
-          saveOnbNote(n, document.getElementById("note" + n).value);
-        });
+      var clarBtn = box.querySelector("[data-clar]");
+      if (clarBtn) clarBtn.addEventListener("click", function () {
+        var text = document.getElementById("clar-text").value;
+        if (!text.trim()) { toast("Skriv vad du vill förtydliga.", true); return; }
+        saveSpecClarification(document.getElementById("clar-scope").value, text);
       });
       Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
         btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
@@ -648,23 +668,13 @@
     });
   }
 
-  function saveOnbNote(n, val) {
-    var body = (val || "").trim() || null;
-    sb.from("onboarding_notes").upsert(
-      { user_id: session.user.id, step_no: n, body: body, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,step_no" }
-    ).then(function (res) {
+  // Kundens förtydligande (per sida eller hela siten) dokumenteras i kravspecen som ny version.
+  function saveSpecClarification(scope, text) {
+    sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null }).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
-      // Från steg 3: kundens komplettering/ändring skapar en ny version av kravspecen.
-      if (n === 3 && body) {
-        sb.rpc("add_customer_spec_version", { p_complement: body }).then(function () {
-          toast("Sparat — din ändring är loggad som en ny version.");
-          loadOnboarding();
-        });
-      } else {
-        toast("Dina kompletteringar är sparade.");
-        loadOnboarding();
-      }
+      if (!res.data) { toast("Kravbilden är inte redo för förtydliganden ännu.", true); return; }
+      toast("Tack! Ditt förtydligande är dokumenterat i kravspecifikationen.");
+      loadOnboarding();
     });
   }
 
@@ -1104,20 +1114,13 @@
           return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
             '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) + dateBit + "</div></div></li>";
         }).join("") + "</ol></div>" +
-        '<div class="card"><h2>Material till kunden (steg 3–5)</h2>' +
-        '<p class="muted">Detta visas för kunden i uppstartsflödet som underlag för verifiering. Steg 3: sammanfattning av mötet. Steg 4: kravbild. Steg 5: länk till utkast.</p>' +
-        (notes[3] && notes[3].body
-          ? '<div class="onb-content-block"><strong>Kundens kompletteringar (steg 3)' +
-            (notes[3].updated_at ? ' — ' + fmtDate(notes[3].updated_at) : "") + "</strong>" +
-            esc(notes[3].body).replace(/\n/g, "<br>") + "</div>"
-          : "") +
+        '<div class="card"><h2>Material till kunden (steg 3 & 5)</h2>' +
+        '<p class="muted">Steg 3: valfri mötessammanfattning i text + transkribering (internt). Steg 5: länk till utkast. Själva kravbilden (steg 4) bor i kravspecifikationen nedan — inte här.</p>' +
         '<form id="form-content">' +
-        '<label for="c3">Steg 3 — kravbild i text (visas för kunden)</label>' +
-        '<textarea id="c3" rows="6" placeholder="Sammanställ kraven från uppstartsmötet i löpande text...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+        '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet (valfri, visas för kunden)</label>' +
+        '<textarea id="c3" rows="5" placeholder="Kort recap av mötet i löpande text (kravbilden i detalj görs i kravspecen)...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
         '<label for="c3trans">Transkribering av uppstartsmötet (internt — visas ej för kunden)</label>' +
         '<textarea id="c3trans" rows="5" placeholder="Klistra in hela transkriberingen här som underlag...">' + esc(content[3] ? (content[3].transcript || "") : "") + "</textarea>" +
-        '<label for="c4">Steg 4 — komplett kravbild</label>' +
-        '<textarea id="c4" rows="6" placeholder="Allt som ska byggas, samlat på ett ställe...">' + esc(content[4] ? (content[4].body || "") : "") + "</textarea>" +
         '<label for="c5link">Steg 5 — länk till utkast</label>' +
         '<input type="text" id="c5link" placeholder="https://..." value="' + esc(content[5] ? (content[5].link || "") : "") + '">' +
         '<label for="c5">Steg 5 — ev. kommentar till utkastet</label>' +
@@ -1197,7 +1200,6 @@
         var now = new Date().toISOString();
         var rows = [
           { user_id: pid, step_no: 3, body: v("c3"), link: null, transcript: v("c3trans"), updated_at: now },
-          { user_id: pid, step_no: 4, body: v("c4"), link: null, updated_at: now },
           { user_id: pid, step_no: 5, body: v("c5"), link: v("c5link"), updated_at: now }
         ];
         sb.from("onboarding_content").upsert(rows, { onConflict: "user_id,step_no" }).then(function (r) {

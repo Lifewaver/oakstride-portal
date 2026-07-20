@@ -276,6 +276,13 @@ form .btn{margin-top:1rem}
 .onb-note textarea{width:100%;min-height:70px;font:inherit;padding:.55rem .65rem;border:1px solid var(--line);border-radius:7px;resize:vertical}
 .onb-note-row{display:flex;align-items:center;gap:.7rem;margin-top:.45rem;flex-wrap:wrap}
 .onb-note-saved{font-size:.78rem;font-family:'IBM Plex Mono',monospace}
+.onb-clar{margin:.5rem 0 .9rem;padding:.7rem .8rem;background:#f4f8f5;border:1px solid #d5e4da;border-radius:8px}
+.onb-clar label{display:block;font-weight:600;color:var(--pine);font-size:.9rem;margin-bottom:.4rem}
+.onb-clar-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.45rem}
+.onb-clar-lbl{font-size:.85rem;color:#5b635a}
+.onb-clar select{font:inherit;padding:.35rem .5rem;border:1px solid var(--line);border-radius:6px;background:#fff}
+.onb-clar textarea{width:100%;min-height:64px;font:inherit;padding:.55rem .65rem;border:1px solid var(--line);border-radius:7px;resize:vertical}
+.onb-clar-hint{font-size:.78rem}
 /* Kravspecifikation */
 .spec-card .spec{margin-top:.4rem}
 .spec-ver{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--pine);background:var(--birch);border-radius:6px;padding:.2rem .5rem;margin-bottom:.5rem}
