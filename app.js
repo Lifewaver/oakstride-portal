@@ -707,6 +707,62 @@
     show("setpass");
   });
 
+  document.getElementById("btn-account").addEventListener("click", renderAccount);
+
+  function renderAccount() {
+    show("app");
+    main.innerHTML = '<div class="spinner"></div>';
+    sb.from("billing_details").select("*").eq("user_id", session.user.id).maybeSingle().then(function (res) {
+      var b = (res && res.data) ? res.data : {};
+      function f(id, label, val, ph, type) { return '<label for="' + id + '">' + esc(label) + '</label><input type="' + (type || "text") + '" id="' + id + '" value="' + esc(val || "") + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : "") + ">"; }
+      main.innerHTML =
+        '<button class="back-link" id="btn-acc-back">&larr; Tillbaka</button>' +
+        '<div class="card" style="max-width:600px"><h1>Mina uppgifter</h1>' +
+        '<form id="form-account">' +
+        '<h2>Kontouppgifter</h2>' +
+        f("acc-name", "Namn", profile.full_name) +
+        f("acc-company", "Företag", profile.company) +
+        f("acc-email", "E-post (inloggning)", profile.email, "", "email") +
+        '<p class="muted onb-hint-sm">Byter du e-post skickas en bekräftelselänk till den nya adressen — bytet sker först när du bekräftat där.</p>' +
+        '<h2 style="margin-top:1.4rem">Faktureringsuppgifter</h2>' +
+        f("bill-company", "Företagsnamn", b.company) +
+        f("bill-org", "Org.nr", b.org_nr, "556000-0000") +
+        f("bill-addr", "Fakturaadress", b.address) +
+        f("bill-postcity", "Postnr & ort", b.postal_city) +
+        f("bill-email", "Fakturamejl", b.invoice_email, "faktura@foretag.se") +
+        f("bill-ref", "Er referens / inköpsordernr", b.reference) +
+        '<button type="submit" class="btn btn-primary btn-inline">Spara</button>' +
+        '<p id="acc-status" class="status-note" hidden></p></form></div>';
+      document.getElementById("btn-acc-back").addEventListener("click", function () {
+        if (profile.is_admin && !viewAsCustomer) renderAdmin(); else renderCustomer();
+      });
+      document.getElementById("form-account").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var note = document.getElementById("acc-status");
+        function v(id) { var el = document.getElementById(id); return el ? (el.value || "").trim() : ""; }
+        var newName = v("acc-name") || null, newCompany = v("acc-company") || null, newEmail = v("acc-email");
+        var bill = { user_id: session.user.id, company: v("bill-company") || null, org_nr: v("bill-org") || null, address: v("bill-addr") || null, postal_city: v("bill-postcity") || null, invoice_email: v("bill-email") || null, reference: v("bill-ref") || null, updated_at: new Date().toISOString() };
+        Promise.all([
+          sb.from("profiles").update({ full_name: newName, company: newCompany }).eq("id", session.user.id),
+          sb.from("billing_details").upsert(bill)
+        ]).then(function (rs) {
+          var err = (rs[0] && rs[0].error) || (rs[1] && rs[1].error);
+          if (err) { note.hidden = false; note.className = "status-note error"; note.textContent = "Kunde inte spara: " + err.message; return; }
+          profile.full_name = newName; profile.company = newCompany;
+          if (newEmail && newEmail !== profile.email) {
+            sb.auth.updateUser({ email: newEmail }).then(function (er) {
+              note.hidden = false;
+              if (er.error) { note.className = "status-note error"; note.textContent = "Uppgifter sparade, men e-post kunde inte ändras: " + er.error.message; }
+              else { note.className = "status-note"; note.textContent = "Sparat! En bekräftelselänk har skickats till " + newEmail + " — e-posten byts när du bekräftat."; }
+            });
+          } else {
+            note.hidden = false; note.className = "status-note"; note.textContent = "Uppgifterna är sparade.";
+          }
+        });
+      });
+    });
+  }
+
   document.getElementById("btn-logout").addEventListener("click", signOut);
   document.getElementById("btn-logout-pending").addEventListener("click", signOut);
   function signOut() { sb.auth.signOut().then(function () { window.location.reload(); }); }
