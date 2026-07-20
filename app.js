@@ -97,6 +97,77 @@
   function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
   function addonPrice(a) { return fmtKr(a.price) + " kr" + (a.billing === "manad" ? "/mån" : " (engång)"); }
 
+  // ---------- Kravspecifikation (standardformat, versionerad) ----------
+
+  var SPEC_SECTIONS = [
+    { key: "mal", title: "Mål & syfte" },
+    { key: "malgrupp", title: "Målgrupp" },
+    { key: "design", title: "Ton & design" },
+    { key: "sidor", title: "Sidstruktur" },
+    { key: "funktioner", title: "Funktioner" },
+    { key: "innehall", title: "Innehåll" },
+    { key: "drift", title: "Domän, e-post & drift" },
+    { key: "ovrigt", title: "Övriga noteringar" }
+  ];
+  function specItem(text, extra) { return { text: text, tier: extra ? "extra" : "standard" }; }
+  // Standardmall — det som ingår i en standardsida är förifyllt (standard).
+  function blankSpec() {
+    var s = {};
+    SPEC_SECTIONS.forEach(function (sec) { s[sec.key] = []; });
+    s.sidor = [specItem("Startsida"), specItem("Tjänster"), specItem("Om oss"), specItem("Kontakt")];
+    s.funktioner = [specItem("Kontaktformulär"), specItem("Mobilanpassad design"), specItem("Grundläggande SEO")];
+    s.drift = [specItem("Drift & hosting av sidan")];
+    return { sections: s };
+  }
+  // Lägg in projektförfrågan direkt i mallen.
+  function specFromBrief(brief) {
+    var d = blankSpec();
+    if (brief) {
+      if (brief.description) d.sections.mal.push(specItem("Från projektförfrågan: " + brief.description));
+      if (brief.example_sites) d.sections.design.push(specItem("Referenssajter: " + brief.example_sites));
+    }
+    return d;
+  }
+  function specSectionToText(items) {
+    return (items || []).map(function (i) { return (i.tier === "extra" ? "* " : "") + i.text; }).join("\n");
+  }
+  function textToSpecItems(text) {
+    return String(text || "").split("\n").map(function (l) { return l.replace(/\s+$/, ""); }).filter(function (l) { return l.trim(); })
+      .map(function (l) {
+        var t = l.trim();
+        if (t.indexOf("*") === 0) return specItem(t.replace(/^\*\s*/, ""), true);
+        return specItem(t);
+      });
+  }
+  function tierBadge(tier) {
+    return tier === "extra" ? '<span class="tier tier-extra">Extra</span>' : '<span class="tier tier-standard">Standard</span>';
+  }
+  // Läsvy av kravspecen (kund + admin). orderedAddons visas som beställda tillägg.
+  function renderSpecView(data, orderedAddons, versionLabel) {
+    var sections = (data && data.sections) || {};
+    var html = '<div class="spec">';
+    if (versionLabel) html += '<div class="spec-ver">' + versionLabel + "</div>";
+    html += '<p class="spec-legend">' + tierBadge("standard") + " ingår i standardsidan · " + tierBadge("extra") + " är tillval utöver standard.</p>";
+    SPEC_SECTIONS.forEach(function (sec) {
+      var items = sections[sec.key] || [];
+      html += '<div class="spec-sec"><h4>' + esc(sec.title) + "</h4>";
+      html += items.length
+        ? '<ul class="spec-list">' + items.map(function (i) {
+            return "<li><span>" + esc(i.text) + "</span> " + tierBadge(i.tier) + "</li>";
+          }).join("") + "</ul>"
+        : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+      html += "</div>";
+    });
+    var extras = orderedAddons || [];
+    html += '<div class="spec-sec"><h4>Tillägg (beställda)</h4>' +
+      (extras.length
+        ? '<ul class="spec-list">' + extras.map(function (a) {
+            return "<li><span>" + esc(a.title) + " · " + esc(addonPrice(a)) + "</span> " + tierBadge("extra") + "</li>";
+          }).join("") + "</ul>"
+        : '<p class="muted spec-empty">Inga beställda tillägg ännu.</p>') + "</div>";
+    return html + "</div>";
+  }
+
   var sb = null;
   var session = null;
   var profile = null;
@@ -416,7 +487,8 @@
       sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id),
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
       sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
-      sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id)
+      sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id),
+      sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false }).limit(1)
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -426,6 +498,7 @@
       var brief = briefs[0] || null;
       var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
       var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
+      var spec = (out[6].error ? [] : (out[6].data || []))[0] || null;
       var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
 
       function isDone(n) { return n === 1 ? !!brief : !!done[n]; }
@@ -497,6 +570,15 @@
             '<div class="onb-acc-body">' + body + "</div></details>";
         }).join("") + "</div></div>";
 
+      // Återkommande kravspecifikation — visas genom hela flödet och fylls på.
+      html += '<div class="card onb-card spec-card"><h2>Din kravspecifikation</h2>' +
+        '<p class="muted">' + (spec
+          ? "Så här har vi dokumenterat era krav på sidan. Den byggs på genom flödet och versioneras när ni kompletterar eller ändrar."
+          : "Så här kommer vi sammanfatta era krav. Panelen fylls på mer och mer genom flödet.") + "</p>" +
+        renderSpecView(spec ? spec.data : specFromBrief(brief), ordered,
+          spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu") +
+        "</div>";
+
       // Villkoren godkänns HÄR, inuti flödet — inte som en vägg innan man kommer in.
       if (accepted) {
         html += '<div class="card onb-card onb-terms-ok"><span class="chip chip-approved">✓ Villkor godkända</span> ' +
@@ -566,13 +648,22 @@
   }
 
   function saveOnbNote(n, val) {
+    var body = (val || "").trim() || null;
     sb.from("onboarding_notes").upsert(
-      { user_id: session.user.id, step_no: n, body: (val || "").trim() || null, updated_at: new Date().toISOString() },
+      { user_id: session.user.id, step_no: n, body: body, updated_at: new Date().toISOString() },
       { onConflict: "user_id,step_no" }
     ).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
-      toast("Dina kompletteringar är sparade.");
-      loadOnboarding();
+      // Från steg 3: kundens komplettering/ändring skapar en ny version av kravspecen.
+      if (n === 3 && body) {
+        sb.rpc("add_customer_spec_version", { p_complement: body }).then(function () {
+          toast("Sparat — din ändring är loggad som en ny version.");
+          loadOnboarding();
+        });
+      } else {
+        toast("Dina kompletteringar är sparade.");
+        loadOnboarding();
+      }
     });
   }
 
@@ -950,8 +1041,9 @@
         sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
         sb.from("customer_services").select("*").eq("user_id", pid).order("kind"),
         sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }),
-        sb.from("onboarding_content").select("step_no, body, link").eq("user_id", pid),
-        sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid)
+        sb.from("onboarding_content").select("step_no, body, link, transcript").eq("user_id", pid),
+        sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid),
+        sb.from("requirement_specs").select("*").eq("user_id", pid).order("version", { ascending: false })
       ]).then(function (out) {
       var addons = out[0].data || [];
       var done = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
@@ -960,6 +1052,10 @@
       var brief = briefs[0] || null;
       var content = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { content[r.step_no] = r; });
       var notes = {}; (out[6].error ? [] : (out[6].data || [])).forEach(function (r) { notes[r.step_no] = r; });
+      var specs = out[7].error ? [] : (out[7].data || []);
+      var latestSpec = specs[0] || null;
+      var specData = latestSpec ? latestSpec.data : specFromBrief(brief);
+      var ordered = addons.filter(function (a) { return a.status === "ordered"; });
       var step1Done = !!brief;
       var doneCount = (step1Done ? 1 : 0) + [2, 3, 4, 5, 6].filter(function (n) { return !!done[n]; }).length;
       var newCount = requests.filter(function (r) { return r.status === "new"; }).length;
@@ -1015,8 +1111,10 @@
             esc(notes[3].body).replace(/\n/g, "<br>") + "</div>"
           : "") +
         '<form id="form-content">' +
-        '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet</label>' +
-        '<textarea id="c3" rows="6" placeholder="Transkribering / sammanfattning av vad ni kom överens om...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+        '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet (visas för kunden)</label>' +
+        '<textarea id="c3" rows="6" placeholder="Sammanfattning av vad ni kom överens om...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+        '<label for="c3trans">Transkribering av uppstartsmötet (internt — visas ej för kunden)</label>' +
+        '<textarea id="c3trans" rows="5" placeholder="Klistra in hela transkriberingen här som underlag...">' + esc(content[3] ? (content[3].transcript || "") : "") + "</textarea>" +
         '<label for="c4">Steg 4 — komplett kravbild</label>' +
         '<textarea id="c4" rows="6" placeholder="Allt som ska byggas, samlat på ett ställe...">' + esc(content[4] ? (content[4].body || "") : "") + "</textarea>" +
         '<label for="c5link">Steg 5 — länk till utkast</label>' +
@@ -1024,6 +1122,24 @@
         '<label for="c5">Steg 5 — ev. kommentar till utkastet</label>' +
         '<textarea id="c5" rows="3" placeholder="Valfritt: vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
         '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
+        '<div class="card"><h2>Kravspecifikation' + (latestSpec ? " — v" + latestSpec.version : " — ingen version ännu") + "</h2>" +
+        '<p class="muted">Standardformat, versionerat. Förifyllt med standardmall + projektförfrågan. Ett objekt per rad; inled raden med <strong>*</strong> för Extra (tillval). Att spara skapar en ny version.</p>' +
+        '<form id="form-spec">' +
+        SPEC_SECTIONS.map(function (sec) {
+          return '<label for="spec-' + sec.key + '">' + esc(sec.title) + "</label>" +
+            '<textarea id="spec-' + sec.key + '" rows="3">' + esc(specSectionToText((specData.sections || {})[sec.key])) + "</textarea>";
+        }).join("") +
+        '<label for="spec-note">Ändringsnotering (vad ändras i denna version)</label>' +
+        '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
+        '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></form>' +
+        (specs.length
+          ? '<h3 class="spec-hist-h">Versioner</h3><ul class="spec-history">' + specs.map(function (v) {
+              var src = v.source === "kund" ? "kundens ändring" : (v.source === "baslinje" ? "baslinje" : "admin");
+              return "<li><strong>v" + v.version + "</strong> · " + fmtDate(v.created_at) + " · " + esc(src) +
+                (v.change_note ? " — " + esc(v.change_note) : "") + "</li>";
+            }).join("") + "</ul>"
+          : "") +
+        "</div>" +
         '<div class="card"><h2>Föreslå tillägg</h2>' +
         '<p class="muted">Kunden får ett mejl och kan beställa eller avböja i portalen.</p>' +
         '<form id="form-addon">' +
@@ -1079,13 +1195,30 @@
         function v(id) { return document.getElementById(id).value.trim() || null; }
         var now = new Date().toISOString();
         var rows = [
-          { user_id: pid, step_no: 3, body: v("c3"), link: null, updated_at: now },
+          { user_id: pid, step_no: 3, body: v("c3"), link: null, transcript: v("c3trans"), updated_at: now },
           { user_id: pid, step_no: 4, body: v("c4"), link: null, updated_at: now },
           { user_id: pid, step_no: 5, body: v("c5"), link: v("c5link"), updated_at: now }
         ];
         sb.from("onboarding_content").upsert(rows, { onConflict: "user_id,step_no" }).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Material sparat.");
+          renderAdminCustomerDetail(pid);
+        });
+      });
+      document.getElementById("form-spec").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var sections = {};
+        SPEC_SECTIONS.forEach(function (sec) { sections[sec.key] = textToSpecItems(document.getElementById("spec-" + sec.key).value); });
+        var nextVer = (latestSpec ? latestSpec.version : 0) + 1;
+        sb.from("requirement_specs").insert({
+          user_id: pid,
+          version: nextVer,
+          data: { sections: sections },
+          change_note: document.getElementById("spec-note").value.trim() || null,
+          source: latestSpec ? "admin" : "baslinje"
+        }).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          toast("Kravspec sparad som version " + nextVer + ".");
           renderAdminCustomerDetail(pid);
         });
       });
