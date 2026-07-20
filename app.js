@@ -34,6 +34,54 @@
   };
   var PRIO_LABELS = { low: "Låg", normal: "Normal", high: "Hög" };
 
+  // Kundvillkor som visas och godkänns i portalen. Bumpa "version" när texten ändras
+  // → alla kunder får godkänna på nytt. Hash av (version + text) loggas som bevis.
+  var AGREEMENT = {
+    version: "2026-07-20",
+    title: "OakStrides kundvillkor",
+    html: [
+      "<h3>1. Om avtalet</h3>",
+      '<p>Dessa villkor gäller mellan OakStride AB ("OakStride") och dig som kund för design, byggnation och löpande omhändertagande av din webbplats. De kompletterar det kundavtal med bilagor som tecknats mellan parterna; vid motstridighet gäller det undertecknade avtalet.</p>',
+      "<h3>2. Standardwebbplats</h3>",
+      "<p>En Standardwebbplats levereras till fast pris och omfattar upp till fem (5) sidor, mallbaserad och mobilanpassad design med din logotyp och dina färger, grundläggande SEO, ett kontaktformulär, koppling av din domän och e-post, inläggning av innehåll som du levererar färdigt, tre (3) uppstartsmöten samt ett (1) korrekturvarv. Arbete utöver detta (t.ex. fler sidor, e-handel, inloggning, specialfunktioner, flerspråkighet eller formgivning från grunden) ingår inte och debiteras per timme.</p>",
+      "<h3>3. Priser (exkl. moms)</h3>",
+      "<ul><li><strong>Standardwebbplats:</strong> 3 000 kr som engångskostnad, faktureras vid beställning.</li>" +
+      "<li><strong>Löpande drift:</strong> 150 kr/mån — hosting, domän, certifikat, säkerhet, säkerhetskopiering och tillgång till kundportalen. Inga ändringar ingår i driften.</li>" +
+      "<li><strong>Ändringar och utveckling efter lansering:</strong> 1 095 kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart.</li>" +
+      "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme (på din begäran).</li></ul>",
+      "<h3>4. Så beställer du ändringar</h3>",
+      "<p>Ändringsönskemål lämnas i den här kundportalen. Du får en tidsuppskattning och, efter ditt godkännande, ett utkast med förhandsvisning. Ingenting publiceras utan ditt godkännande. Nedlagd tid debiteras enligt punkt 3.</p>",
+      "<h3>5. Betalning</h3>",
+      "<p>Betalningsvillkor 20 dagar netto. Månadsavgiften för drift faktureras i förskott. Vid försenad betalning utgår dröjsmålsränta enligt räntelagen samt lagstadgad påminnelseavgift.</p>",
+      "<h3>6. Avtalstid och uppsägning</h3>",
+      "<p>Driften löper tills vidare med en (1) månads ömsesidig uppsägningstid. Uppstartsprojektet avslutas vid godkänd leverans.</p>",
+      "<h3>7. Du äger din sajt</h3>",
+      "<p>Efter full betalning äger du ditt innehåll och har obegränsad nyttjanderätt till den levererade webbplatsen. Vid uppsägning lämnar OakStride utan extra kostnad över en komplett kopia av webbplatsens filer och innehåll samt domänen — du är aldrig inlåst.</p>",
+      "<h3>8. Användning av AI</h3>",
+      "<p>OakStride använder AI-verktyg som stöd i arbetet. Alla utkast granskas av en människa innan publicering, och ditt material används inte för att träna AI-modeller.</p>",
+      "<h3>9. Personuppgifter</h3>",
+      "<p>Vardera parten ansvarar för sin egen behandling av personuppgifter. Behandlar OakStride personuppgifter för din räkning upprättas ett personuppgiftsbiträdesavtal.</p>",
+      "<h3>10. Ansvar</h3>",
+      "<p>OakStride utför tjänsterna fackmässigt. OakStride ansvarar inte för indirekt skada, och det sammanlagda ansvaret per tolvmånadersperiod är begränsat till de avgifter du betalat under samma period. Begränsningen gäller inte vid uppsåt eller grov vårdslöshet.</p>",
+      "<h3>11. Tvist</h3>",
+      "<p>Svensk rätt tillämpas. Tvist avgörs av svensk allmän domstol med Stockholms tingsrätt som första instans.</p>",
+      '<p class="fineprint">Genom att godkänna bekräftar du att du har behörighet att ingå avtalet för kundens räkning och att du läst och accepterat dessa villkor. Godkännandet loggas med tidpunkt och en kontrollsumma av villkorstexten, och en bekräftelse skickas till din e-post.</p>'
+    ].join("")
+  };
+
+  function sha256Hex(str) {
+    try {
+      var buf = new TextEncoder().encode(str);
+      return crypto.subtle.digest("SHA-256", buf).then(function (h) {
+        return Array.prototype.map.call(new Uint8Array(h), function (b) {
+          return ("0" + b.toString(16)).slice(-2);
+        }).join("");
+      });
+    } catch (e) {
+      return Promise.resolve("nohash-" + str.length);
+    }
+  }
+
   var sb = null;
   var session = null;
   var profile = null;
@@ -121,8 +169,66 @@
       document.getElementById("admin-nav").hidden = !profile.is_admin;
       document.getElementById("btn-viewas").hidden = !profile.is_admin;
       show("app");
-      if (profile.is_admin && !viewAsCustomer) renderAdmin(); else renderCustomer();
+      // Admin (och admin i "visa som kund"-läge) hoppar över godkännandegrinden.
+      if (profile.is_admin) { if (viewAsCustomer) renderCustomer(); else renderAdmin(); return; }
+      requireAgreement(renderCustomer);
     });
+  }
+
+  // ---------- Avtalsgodkännande ----------
+
+  function requireAgreement(next) {
+    sb.from("agreement_acceptances").select("id")
+      .eq("user_id", session.user.id).eq("agreement_version", AGREEMENT.version)
+      .maybeSingle().then(function (res) {
+        if (res.data) { next(); return; }        // redan godkänt aktuell version
+        renderAgreementGate(next);
+      });
+  }
+
+  function renderAgreementGate(next) {
+    main.innerHTML =
+      '<div class="card agreement-card">' +
+      "<h1>Innan vi sätter igång</h1>" +
+      '<p class="muted">För att använda portalen behöver du godkänna OakStrides kundvillkor. Läs igenom dem nedan.</p>' +
+      '<div class="agreement-box">' + AGREEMENT.html + "</div>" +
+      '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + ").</span></label>" +
+      '<button id="btn-agree" class="btn btn-primary" disabled>Godkänn avtal</button>' +
+      '<p id="agree-status" class="status-note" hidden></p></div>';
+    var cbEl = document.getElementById("agree-cb");
+    var btn = document.getElementById("btn-agree");
+    cbEl.addEventListener("change", function () { btn.disabled = !cbEl.checked; });
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      sha256Hex(AGREEMENT.version + "\n" + AGREEMENT.html).then(function (hash) {
+        sb.from("agreement_acceptances").insert({
+          user_id: session.user.id,
+          agreement_version: AGREEMENT.version,
+          document_title: AGREEMENT.title,
+          document_hash: hash,
+          user_agent: navigator.userAgent
+        }).then(function (res) {
+          if (res.error) {
+            if (res.error.code === "23505") { next(); return; } // redan godkänt → släpp in
+            var n = document.getElementById("agree-status");
+            n.hidden = false; n.className = "status-note error";
+            n.textContent = "Kunde inte spara godkännandet: " + res.error.message;
+            btn.disabled = false; return;
+          }
+          toast("Tack! Avtalet är godkänt.");
+          next();
+        });
+      });
+    });
+  }
+
+  function renderTermsView(back) {
+    main.innerHTML =
+      '<button class="back-link" id="btn-back">&larr; Tillbaka</button>' +
+      '<div class="card"><h1>' + esc(AGREEMENT.title) + "</h1>" +
+      '<p class="muted">Version ' + esc(AGREEMENT.version) + "</p>" +
+      '<div class="agreement-box">' + AGREEMENT.html + "</div></div>";
+    document.getElementById("btn-back").addEventListener("click", back);
   }
 
   // ---------- Login ----------
@@ -299,9 +405,12 @@
       '<div id="req-list" class="req-list"><div class="spinner"></div></div></div>' +
       '<div class="card dash-contact"><h2>Behöver du hjälp?</h2>' +
       '<p class="muted">Vi finns ett mejl eller ett samtal bort — inga växlar, inga köer.</p>' +
-      '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
+      '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p>' +
+      '<p class="fineprint">Du har godkänt OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + "). " +
+      '<button class="linklike" id="btn-terms">Läs villkoren</button></p></div>';
     document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
     document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
+    document.getElementById("btn-terms").addEventListener("click", function () { renderTermsView(renderCustomer); });
     loadRequests(false);
     loadStats(site);
   }

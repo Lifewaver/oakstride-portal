@@ -208,3 +208,21 @@ form .btn{margin-top:1rem}
   .card{padding:1.4rem}
   .table th:nth-child(4),.table td:nth-child(4){display:none}
 }
+
+/* Avtalsgodkännande */
+.agreement-card{max-width:720px;margin:0 auto}
+.agreement-box{
+  max-height:46vh;overflow-y:auto;margin:1rem 0;padding:1.1rem 1.3rem;
+  background:var(--paper);border:1px solid var(--line);border-radius:10px;
+  font-size:.92rem;
+}
+.agreement-box h3{font-size:1rem;margin:1.1rem 0 .35rem}
+.agreement-box h3:first-child{margin-top:0}
+.agreement-box p{margin-bottom:.6rem}
+.agreement-box ul{margin:.2rem 0 .6rem 1.2rem}
+.agreement-box li{margin-bottom:.3rem}
+.agree-check{
+  display:flex;gap:.6rem;align-items:flex-start;cursor:pointer;
+  font-weight:500;color:var(--ink);font-size:.95rem;margin:.25rem 0 1rem;
+}
+.agree-check input{width:auto;margin-top:.2rem;flex:none}
