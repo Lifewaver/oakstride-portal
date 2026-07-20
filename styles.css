@@ -283,6 +283,9 @@ form .btn{margin-top:1rem}
 .onb-clar select{font:inherit;padding:.35rem .5rem;border:1px solid var(--line);border-radius:6px;background:#fff}
 .onb-clar textarea{width:100%;min-height:64px;font:inherit;padding:.55rem .65rem;border:1px solid var(--line);border-radius:7px;resize:vertical}
 .onb-clar-hint{font-size:.78rem}
+.onb-verify3{margin-top:.6rem}
+.onb-verify3-q{margin:0 0 .4rem;font-weight:600;color:var(--pine);font-size:.93rem}
+.onb-verify3-btns{display:flex;gap:.6rem;flex-wrap:wrap}
 /* Kravspecifikation */
 .spec-card .spec{margin-top:.4rem}
 .spec-ver{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--pine);background:var(--birch);border-radius:6px;padding:.2rem .5rem;margin-bottom:.5rem}

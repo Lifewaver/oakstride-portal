@@ -485,7 +485,7 @@
       sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
       sb.from("agreement_acceptances").select("id").eq("user_id", session.user.id)
         .eq("agreement_version", AGREEMENT.version).maybeSingle(),
-      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id),
+      sb.from("onboarding_checkoffs").select("step_no, done_at, with_extras").eq("user_id", session.user.id),
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
       sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
       sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id),
@@ -500,7 +500,8 @@
       var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
       var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
       var spec = (out[6].error ? [] : (out[6].data || []))[0] || null;
-      var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
+      var done = {}, doneExtras = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
+      function extrasLabel(n) { return n === 3 && done[3] ? (doneExtras[3] ? " (med tillägg)" : " (utan tillägg)") : ""; }
 
       function isDone(n) { return n === 1 ? !!brief : !!done[n]; }
       function doneDate(n) { return n === 1 ? (brief && brief.created_at) : done[n]; }
@@ -521,7 +522,7 @@
         '<div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, dn = isDone(n), cur = (n === current);
           var cls = dn ? "done" : (cur ? "current" : "upcoming");
-          var meta = dn ? '<span class="onb-acc-meta">✓ ' + fmtDate(doneDate(n)) + "</span>"
+          var meta = dn ? '<span class="onb-acc-meta">✓ ' + fmtDate(doneDate(n)) + extrasLabel(n) + "</span>"
             : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
           var body = (s.loop ? '<p class="onb-loop-note"><span class="onb-loop-badge">↻</span> Iterativt steg — kan upprepas tills du är nöjd.</p>' : "") +
             '<div class="onb-step-desc">' + esc(s.desc) + "</div>";
@@ -573,10 +574,15 @@
           }
 
           if (dn) {
-            if (n !== 1) body += '<p class="onb-verified">✓ Verifierat ' + fmtDate(doneDate(n)) + "</p>";
+            if (n !== 1) body += '<p class="onb-verified">✓ Verifierat ' + fmtDate(doneDate(n)) + extrasLabel(n) + "</p>";
           } else if (cur && n !== 1) {
             if (s.content && !stepReady(n)) {
               body += '<p class="status-note">Blir tillgängligt när OakStride lagt upp kravbilden/utkastet.</p>';
+            } else if (n === 3) {
+              body += '<div class="onb-verify3"><p class="onb-verify3-q">Verifiera kravbilden:</p>' +
+                '<div class="onb-verify3-btns">' +
+                '<button class="btn btn-ghost btn-sm" data-verify3="0">Verifiera utan tillägg</button>' +
+                '<button class="btn btn-primary btn-sm btn-inline" data-verify3="1">Verifiera med tillägg</button></div></div>';
             } else {
               body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
             }
@@ -645,6 +651,9 @@
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
       });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-verify3]"), function (btn) {
+        btn.addEventListener("click", function () { checkoffStep(3, btn.getAttribute("data-verify3") === "1"); });
+      });
       var clarBtn = box.querySelector("[data-clar]");
       if (clarBtn) clarBtn.addEventListener("click", function () {
         var text = document.getElementById("clar-text").value;
@@ -660,10 +669,12 @@
     });
   }
 
-  function checkoffStep(n) {
-    sb.from("onboarding_checkoffs").insert({ user_id: session.user.id, step_no: n }).then(function (res) {
+  function checkoffStep(n, withExtras) {
+    var row = { user_id: session.user.id, step_no: n };
+    if (n === 3) row.with_extras = !!withExtras;
+    sb.from("onboarding_checkoffs").insert(row).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
-      toast("Steg godkänt!");
+      toast(n === 3 ? ("Kravbilden verifierad " + (withExtras ? "med tillägg." : "utan tillägg.")) : "Steg godkänt!");
       loadOnboarding();
     });
   }
@@ -1048,7 +1059,7 @@
       if (pres.error || !p) { toast("Kunde inte hämta kunden.", true); renderAdminCustomers(); return; }
       Promise.all([
         sb.from("addons").select("*").eq("user_id", pid).order("created_at"),
-        sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", pid),
+        sb.from("onboarding_checkoffs").select("step_no, done_at, with_extras").eq("user_id", pid),
         sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
         sb.from("customer_services").select("*").eq("user_id", pid).order("kind"),
         sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }),
@@ -1057,7 +1068,7 @@
         sb.from("requirement_specs").select("*").eq("user_id", pid).order("version", { ascending: false })
       ]).then(function (out) {
       var addons = out[0].data || [];
-      var done = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
+      var done = {}, doneExtras = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
       var requests = out[2].data || [], services = out[3].data || [];
       var briefs = out[4].error ? [] : (out[4].data || []);
       var brief = briefs[0] || null;
@@ -1110,7 +1121,9 @@
           var n = i + 1, isDone = n === 1 ? step1Done : !!done[n];
           var dateBit = n === 1
             ? (step1Done ? ' <span class="onb-step-date">' + fmtDate(brief.created_at) + '</span> <span class="muted">(via projektförfrågan)</span>' : "")
-            : (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + '</span> <button class="linklike" data-undo="' + n + '">Ångra</button>' : "");
+            : (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + "</span>" +
+                (n === 3 ? ' <span class="muted">(' + (doneExtras[3] ? "med tillägg" : "utan tillägg") + ")</span>" : "") +
+                ' <button class="linklike" data-undo="' + n + '">Ångra</button>' : "");
           return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
             '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) + dateBit + "</div></div></li>";
         }).join("") + "</ol></div>" +
