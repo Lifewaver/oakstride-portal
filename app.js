@@ -37,7 +37,7 @@
   // Kundvillkor som visas och godkänns i portalen. Bumpa "version" när texten ändras
   // → alla kunder får godkänna på nytt. Hash av (version + text) loggas som bevis.
   var AGREEMENT = {
-    version: "2026-07-20",
+    version: "2026-07-20b",
     title: "OakStrides kundvillkor",
     html: [
       "<h3>1. Om avtalet</h3>",
@@ -46,9 +46,10 @@
       "<p>En Standardwebbplats levereras till fast pris och omfattar upp till fem (5) sidor, mallbaserad och mobilanpassad design med din logotyp och dina färger, grundläggande SEO, ett kontaktformulär, koppling av din domän och e-post, inläggning av innehåll som du levererar färdigt, tre (3) uppstartsmöten samt ett (1) korrekturvarv. Arbete utöver detta (t.ex. fler sidor, e-handel, inloggning, specialfunktioner, flerspråkighet eller formgivning från grunden) ingår inte och debiteras per timme.</p>",
       "<h3>3. Priser (exkl. moms)</h3>",
       "<ul><li><strong>Standardwebbplats:</strong> 3 000 kr som engångskostnad, faktureras vid beställning.</li>" +
-      "<li><strong>Löpande drift:</strong> 150 kr/mån — hosting, domän, certifikat, säkerhet, säkerhetskopiering och tillgång till kundportalen. Inga ändringar ingår i driften.</li>" +
+      "<li><strong>Löpande drift:</strong> 150 kr/mån — hosting, DNS- och domänskötsel, certifikat, säkerhet, säkerhetskopiering och tillgång till kundportalen. Inga ändringar ingår i driften.</li>" +
       "<li><strong>Ändringar och utveckling efter lansering:</strong> 1 095 kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart.</li>" +
-      "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme (på din begäran).</li></ul>",
+      "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme (på din begäran).</li>" +
+      "<li><strong>Tredjepartskostnader:</strong> domänavgift, e-post (t.ex. Microsoft 365) och andra externa tjänster ingår inte utan betalas av dig till självkostnad — du kan även teckna dem själv.</li></ul>",
       "<h3>4. Så beställer du ändringar</h3>",
       "<p>Ändringsönskemål lämnas i den här kundportalen. Du får en tidsuppskattning och, efter ditt godkännande, ett utkast med förhandsvisning. Ingenting publiceras utan ditt godkännande. Nedlagd tid debiteras enligt punkt 3.</p>",
       "<h3>5. Betalning</h3>",
