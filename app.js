@@ -78,6 +78,7 @@
     };
   }
   var AGREEMENT = buildAgreement(pricing);
+  var custAgreement = AGREEMENT; // kundens effektiva villkor (per-kund-priser); sätts i loadOnboarding
 
   function sha256Hex(str) {
     try {
@@ -242,6 +243,10 @@
   function specSecTitle(key) { for (var i = 0; i < SPEC_SECTIONS.length; i++) { if (SPEC_SECTIONS[i].key === key) return SPEC_SECTIONS[i].title; } return key; }
   function specSitePrice(d) { return d && d.pricing && d.pricing.site != null && d.pricing.site !== "" ? Number(d.pricing.site) : Number(pricing.site_price); }
   function specDriftPrice(d) { return d && d.pricing && d.pricing.drift != null && d.pricing.drift !== "" ? Number(d.pricing.drift) : Number(pricing.drift_month); }
+  function specRateSetup(d) { return d && d.pricing && d.pricing.rate_setup != null && d.pricing.rate_setup !== "" ? Number(d.pricing.rate_setup) : Number(pricing.rate_setup); }
+  function specRateChange(d) { return d && d.pricing && d.pricing.rate_change != null && d.pricing.rate_change !== "" ? Number(d.pricing.rate_change) : Number(pricing.rate_change); }
+  // Effektiv prisbild per kund = kravspecens överskrivningar, annars standardpriserna.
+  function effectivePricing(d) { return { site_price: specSitePrice(d), drift_month: specDriftPrice(d), rate_setup: specRateSetup(d), rate_change: specRateChange(d) }; }
   function specSecInner(key, sections) {
     var items = sections[key] || [];
     if (key === "sidor") return items.length ? '<div class="spec-pages">' + items.map(renderSpecPage).join("") + "</div>" : '<p class="muted spec-empty">Fylls i efter hand.</p>';
@@ -266,17 +271,18 @@
       });
       if (av.cost === "build") {
         var sitePrice = specSitePrice(data);
+        var rSetup = specRateSetup(data);
         var eh = (data && data.extra_hours) || [];
         var totalH = eh.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
         var engAddons = addons.filter(function (a) { return a.billing !== "manad"; });
         var engSum = engAddons.reduce(function (s, a) { return s + Number(a.price || 0); }, 0);
-        var totalEng = sitePrice + Math.round(totalH * pricing.rate_setup) + engSum;
+        var totalEng = sitePrice + Math.round(totalH * rSetup) + engSum;
         html += '<div class="spec-cost-box"><h4>Kostnad — engång (exkl. moms)</h4><ul class="spec-cost-list">' +
           "<li><span>Standardsida</span><span>" + fmtKr(sitePrice) + " kr</span></li>" +
-          eh.map(function (i) { return "<li><span>" + esc(i.label) + " (" + fmtHours(i.hours) + " tim)</span><span>" + fmtKr(Math.round((Number(i.hours) || 0) * pricing.rate_setup)) + " kr</span></li>"; }).join("") +
+          eh.map(function (i) { return "<li><span>" + esc(i.label) + " (" + fmtHours(i.hours) + " tim)</span><span>" + fmtKr(Math.round((Number(i.hours) || 0) * rSetup)) + " kr</span></li>"; }).join("") +
           engAddons.map(function (a) { return "<li><span>" + esc(a.title) + "</span><span>" + fmtKr(a.price) + " kr</span></li>"; }).join("") +
           '<li class="spec-cost-sum"><span>Summa engång</span><span>' + fmtKr(totalEng) + " kr</span></li></ul>" +
-          (eh.length ? '<p class="muted spec-note">Extra arbete debiteras per nedlagd timme à ' + fmtKr(pricing.rate_setup) + " kr; beloppet ovan är en uppskattning.</p>" : "") + "</div>";
+          (eh.length ? '<p class="muted spec-note">Extra arbete debiteras per nedlagd timme à ' + fmtKr(rSetup) + " kr; beloppet ovan är en uppskattning.</p>" : "") + "</div>";
       } else if (av.cost === "drift") {
         var driftPrice = specDriftPrice(data);
         var manAddons = addons.filter(function (a) { return a.billing === "manad"; });
@@ -291,7 +297,7 @@
               rc.map(function (i) { return "<li><span>" + esc(i.label) + "</span><span>" + (i.amount == null || i.amount === "" ? "" : fmtKr(i.amount) + " kr" + periodSuffix(i.period)) + "</span></li>"; }).join("") +
               '</ul><p class="muted spec-note">Vidarefaktureras till självkostnad.</p>'
             : "") +
-          '<p class="muted spec-note">Ändringar och löpande arbete efter lansering debiteras ' + fmtKr(pricing.rate_change) + " kr/tim.</p></div>";
+          '<p class="muted spec-note">Ändringar och löpande arbete efter lansering debiteras ' + fmtKr(specRateChange(data)) + " kr/tim.</p></div>";
       }
       html += "</section>";
     });
@@ -360,12 +366,14 @@
         html += "</div>";
       });
       if (av.cost === "build") {
-        html += '<div class="se-sec"><h4>Grundpris standardsida (kr, engång)</h4><input type="text" id="spec-site-price" class="se-price" value="' + esc(specSitePrice(d)) + '"></div>' +
-          '<div class="se-sec" data-block="extra"><h4>Extra arbete (' + fmtKr(pricing.rate_setup) + ' kr/tim)</h4>' +
+        html += '<div class="se-price-row"><div class="se-sec"><h4>Grundpris standardsida (kr, engång)</h4><input type="text" id="spec-site-price" class="se-price" value="' + esc(specSitePrice(d)) + '"></div>' +
+          '<div class="se-sec"><h4>Timpris uppsättning (kr/tim)</h4><input type="text" id="spec-rate-setup" class="se-price" value="' + esc(specRateSetup(d)) + '"></div></div>' +
+          '<div class="se-sec" data-block="extra"><h4>Extra arbete (' + fmtKr(specRateSetup(d)) + ' kr/tim)</h4>' +
           '<div class="se-rows se-rows-extra">' + (d.extra_hours || []).map(seExtraRow).join("") + "</div>" +
           '<button type="button" class="se-add-extra btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
       } else if (av.cost === "drift") {
-        html += '<div class="se-sec"><h4>Driftavgift (kr/mån)</h4><input type="text" id="spec-drift-price" class="se-price" value="' + esc(specDriftPrice(d)) + '"></div>' +
+        html += '<div class="se-price-row"><div class="se-sec"><h4>Driftavgift (kr/mån)</h4><input type="text" id="spec-drift-price" class="se-price" value="' + esc(specDriftPrice(d)) + '"></div>' +
+          '<div class="se-sec"><h4>Timpris ändringar &amp; drift (kr/tim)</h4><input type="text" id="spec-rate-change" class="se-price" value="' + esc(specRateChange(d)) + '"></div></div>' +
           '<div class="se-sec" data-block="recurring"><h4>Löpande kostnader (självkostnad)</h4>' +
           '<div class="se-rows se-rows-rec">' + (d.recurring_costs || []).map(seRecRow).join("") + "</div>" +
           '<button type="button" class="se-add-recurring btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
@@ -395,7 +403,7 @@
     var domStatus = root.querySelector("#spec-domain").value;
     var domName = root.querySelector("#spec-domain-name").value.trim();
     function priceOf(id) { var el = root.querySelector(id); if (!el || el.value.trim() === "") return null; var v = parseFloat(el.value.replace(",", ".").replace(/\s/g, "")); return isNaN(v) ? null : v; }
-    var pricing = { site: priceOf("#spec-site-price"), drift: priceOf("#spec-drift-price") };
+    var specPricing = { site: priceOf("#spec-site-price"), drift: priceOf("#spec-drift-price"), rate_setup: priceOf("#spec-rate-setup"), rate_change: priceOf("#spec-rate-change") };
     var extra = Array.prototype.map.call(root.querySelectorAll('[data-block="extra"] .se-row'), function (r) {
       return { label: r.querySelector(".se-eh-label").value.trim(), hours: parseFloat(String(r.querySelector(".se-eh-hours").value).replace(",", ".")) || 0 };
     }).filter(function (x) { return x.label; });
@@ -408,7 +416,7 @@
       domain: (domStatus || domName) ? { status: domStatus || null, name: domName || null } : null,
       extra_hours: extra,
       recurring_costs: recurring,
-      pricing: pricing
+      pricing: specPricing
     };
   }
   function wireSpecEditor(root) {
@@ -545,11 +553,11 @@
 
   function acceptTerms(btn) {
     btn.disabled = true;
-    sha256Hex(AGREEMENT.version + "\n" + AGREEMENT.html).then(function (hash) {
+    sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
       sb.from("agreement_acceptances").insert({
         user_id: session.user.id,
-        agreement_version: AGREEMENT.version,
-        document_title: AGREEMENT.title,
+        agreement_version: custAgreement.version,
+        document_title: custAgreement.title,
         document_hash: hash,
         user_agent: navigator.userAgent
       }).then(function (res) {
@@ -567,9 +575,9 @@
   function renderTermsView(back) {
     main.innerHTML =
       '<button class="back-link" id="btn-back">&larr; Tillbaka</button>' +
-      '<div class="card"><h1>' + esc(AGREEMENT.title) + "</h1>" +
-      '<p class="muted">Version ' + esc(AGREEMENT.version) + "</p>" +
-      '<div class="agreement-box">' + AGREEMENT.html + "</div></div>";
+      '<div class="card"><h1>' + esc(custAgreement.title) + "</h1>" +
+      '<p class="muted">Version ' + esc(custAgreement.version) + "</p>" +
+      '<div class="agreement-box">' + custAgreement.html + "</div></div>";
     document.getElementById("btn-back").addEventListener("click", back);
   }
 
@@ -761,8 +769,7 @@
     if (!box) return;
     Promise.all([
       sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
-      sb.from("agreement_acceptances").select("id").eq("user_id", session.user.id)
-        .eq("agreement_version", AGREEMENT.version).maybeSingle(),
+      sb.from("agreement_acceptances").select("agreement_version").eq("user_id", session.user.id),
       sb.from("onboarding_checkoffs").select("step_no, done_at, with_extras").eq("user_id", session.user.id),
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
       sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
@@ -772,7 +779,6 @@
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
-      var accepted = !!(out[1] && out[1].data);
       var checkoffs = out[2].error ? [] : (out[2].data || []);
       var briefs = out[3].error ? [] : (out[3].data || []);
       var brief = briefs[0] || null;
@@ -780,6 +786,10 @@
       var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
       var specs = out[6].error ? [] : (out[6].data || []);
       var spec = specs[0] || null;
+      // Kundens villkor byggs från kundens effektiva priser (kravspec-överskrivning, annars standard).
+      custAgreement = buildAgreement(effectivePricing(spec ? spec.data : null));
+      var acceptVersions = (out[1].error ? [] : (out[1].data || [])).map(function (a) { return a.agreement_version; });
+      var accepted = acceptVersions.indexOf(custAgreement.version) !== -1;
       // Kunden har gjort en ändring/förtydligande om det finns en kund-genererad version.
       var hasCustomerChange = specs.some(function (v) { return v.source === "kund"; });
       var approvals = out[7].error ? [] : (out[7].data || []);
@@ -894,7 +904,7 @@
         var th = extraHours.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
         html += '<div class="card onb-card"><h2>Godkänn extra arbete</h2>' +
           '<p class="muted">Utöver standardsidan tillkommer extra arbete (se ”Extra arbete” i kravspecifikationen ovan) — uppskattat ' +
-          fmtHours(th) + " tim ≈ " + fmtKr(Math.round(th * pricing.rate_setup)) + ' kr, exkl. moms. Det debiteras per nedlagd timme à ' + fmtKr(pricing.rate_setup) + " kr. Godkänn att vi får utföra och fakturera det.</p>" +
+          fmtHours(th) + " tim ≈ " + fmtKr(Math.round(th * specRateSetup(spec.data))) + ' kr, exkl. moms. Det debiteras per nedlagd timme à ' + fmtKr(specRateSetup(spec.data)) + " kr. Godkänn att vi får utföra och fakturera det.</p>" +
           (extraApproved
             ? '<p class="onb-verified">✓ Du har godkänt det extra arbetet (version ' + spec.version + ").</p>"
             : '<label class="onb-confirm"><input type="checkbox" data-approve-extra="' + spec.version + '"> <span>Jag godkänner det extra arbetet och att det faktureras per timme</span></label>') +
@@ -904,13 +914,13 @@
       // Villkoren godkänns HÄR, inuti flödet — inte som en vägg innan man kommer in.
       if (accepted) {
         html += '<div class="card onb-card onb-terms-ok"><span class="chip chip-approved">✓ Villkor godkända</span> ' +
-          '<span class="muted">Du har godkänt OakStrides kundvillkor (v ' + esc(AGREEMENT.version) + "). </span>" +
+          '<span class="muted">Du har godkänt OakStrides kundvillkor (v ' + esc(custAgreement.version) + "). </span>" +
           '<button class="linklike" id="btn-terms">Läs villkoren</button></div>';
       } else {
         html += '<div class="card onb-card"><h2>Godkänn villkoren</h2>' +
           '<p class="muted">När du sett hur vi jobbar ovan — läs igenom och godkänn våra kundvillkor så kör vi igång.</p>' +
-          '<div class="agreement-box">' + AGREEMENT.html + "</div>" +
-          '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + ").</span></label>" +
+          '<div class="agreement-box">' + custAgreement.html + "</div>" +
+          '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(custAgreement.version) + ").</span></label>" +
           '<button id="btn-agree" class="btn btn-primary" disabled>Godkänn villkoren</button>' +
           '<p id="agree-status" class="status-note" hidden></p></div>';
       }
@@ -1249,8 +1259,8 @@
       var p = (res && res.data) ? res.data : DEFAULT_PRICING;
       function pf(id, label, val) { return '<label for="' + id + '">' + esc(label) + '</label><input type="text" id="' + id + '" class="se-price" value="' + esc(val) + '">'; }
       main.innerHTML =
-        '<div class="card" style="max-width:560px"><h1>Priser &amp; villkor</h1>' +
-        '<p class="muted">Standardpriserna används som förifyllda värden i kravspecen och visas i kundvillkoren. Ändrar du ett pris uppdateras villkoren automatiskt till en ny version (som kunder godkänner på nytt).</p>' +
+        '<div class="card" style="max-width:560px"><h1>Standardpriser</h1>' +
+        '<p class="muted">Det här är standardpriserna som förifylls för nya kunder. Per kund justerar du priserna i kravspecen (avsnitt 2 och 3), och <strong>varje kunds villkor visar den kundens priser</strong>. Ändrar du standardpriserna här gäller de för kunder som inte har egna priser.</p>' +
         '<form id="form-pricing">' +
         pf("p-site", "Standardwebbplats (kr, engång)", p.site_price) +
         pf("p-drift", "Löpande drift (kr/mån)", p.drift_month) +
