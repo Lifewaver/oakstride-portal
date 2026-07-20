@@ -863,20 +863,21 @@
           }
 
           if (s.offer) {
+            var docBtns = '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm" id="btn-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm" id="btn-open-terms">Öppna villkoren &#8599;</button></div>';
             if (!spec) {
               body += '<p class="muted">Kravspecifikationen och offerten sammanställs av OakStride efter uppstartsmötet. Du får ett mejl när den är redo att godkänna.</p>';
             } else if (dn) {
-              body += '<p class="onb-verified">✓ Du har godkänt offerten (v' + spec.version + ") och villkoren (v " + esc(custAgreement.version) + ").</p>" +
-                '<p><button class="linklike" id="btn-terms">Läs villkoren</button></p>' +
+              body += '<p class="onb-verified">✓ Du har godkänt kravspecifikationen/offerten (v' + spec.version + ") och villkoren (v " + esc(custAgreement.version) + ").</p>" +
+                docBtns +
                 '<div class="onb-content-block"><strong>Faktureringsuppgifter</strong>' + esc(billing.company) +
                 (billing.org_nr ? " · " + esc(billing.org_nr) : "") + (billing.invoice_email ? "<br>" + esc(billing.invoice_email) : "") + "</div>";
             } else if (cur) {
               if (content[3] && content[3].body) body += '<div class="onb-content-block"><strong>Sammanfattning från uppstartsmötet</strong>' + esc(content[3].body).replace(/\n/g, "<br>") + "</div>";
-              body += '<p class="muted">Din kravspecifikation och offert finns i panelen längre ned (version ' + spec.version + "). Läs igenom och godkänn nedan.</p>" +
+              body += '<p class="muted">Läs igenom kravspecifikationen/offerten och våra villkor nedan, och godkänn. Vill du ändra något — skicka en kommentar först.</p>' +
+                docBtns +
                 clarFormHtml() +
-                '<div class="onb-terms-block"><h4>Villkor</h4>' +
-                '<p><button type="button" class="btn btn-ghost btn-sm" id="btn-open-terms">Öppna villkoren &#8599;</button></p>' +
-                '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(custAgreement.version) + ").</span></label></div>" +
+                '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner kravspecifikationen/offerten (v' + spec.version + ") och OakStrides kundvillkor (version " + esc(custAgreement.version) + ").</span></label>" +
                 billingFormHtml(billing) +
                 '<button id="btn-approve-offer" class="btn btn-primary btn-inline" disabled>Godkänn offert &amp; villkor</button>';
             } else {
@@ -915,12 +916,6 @@
             '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary>' +
             '<div class="onb-acc-body">' + body + "</div></details>";
         }).join("") + "</div></div>";
-
-      html += '<div class="card onb-card"><h2>Din kravspecifikation & offert</h2>' +
-        '<p class="muted">' + (spec
-          ? "Hela kravspecifikationen och offerten (version " + spec.version + ") öppnas i ett eget fönster."
-          : "En förhandsvisning av kravspecifikationen öppnas i ett eget fönster. Den fylls på genom flödet.") + "</p>" +
-        '<button type="button" class="btn btn-primary btn-inline" id="btn-open-spec">Öppna kravspecifikation & offert &#8599;</button></div>';
 
       box.innerHTML = html;
 
