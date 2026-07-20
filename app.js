@@ -809,7 +809,10 @@
       var acceptVersions = (out[1].error ? [] : (out[1].data || [])).map(function (a) { return a.agreement_version; });
       var termsAccepted = acceptVersions.indexOf(custAgreement.version) !== -1;
       var approvals = out[6].error ? [] : (out[6].data || []);
-      var offerApproved = !!(spec && approvals.some(function (a) { return a.spec_version === spec.version; }));
+      // Har kunden godkänt AKTUELL kravspec/offert-version?
+      var offerCurrentApproved = !!(spec && approvals.some(function (a) { return a.spec_version === spec.version; }));
+      var hasApprovedOffer = approvals.length > 0;      // godkänt någon offertversion (steg 3)
+      var hasAcceptedTerms = acceptVersions.length > 0; // godkänt villkoren någon gång (steg 3)
       var billing = (out[7] && out[7].data) ? out[7].data : null;
       var billingComplete = !!(billing && billing.company && billing.org_nr && billing.invoice_email);
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
@@ -818,7 +821,8 @@
       function utkastReady() { var c = content[5]; return !!(c && (c.link || c.body)); }
       function isDone(n) {
         if (n === 1) return !!brief;
-        if (n === 3) return !!(spec && offerApproved && termsAccepted && billingComplete);
+        if (n === 3) return !!(spec && hasApprovedOffer && hasAcceptedTerms && billingComplete);
+        if (n === 4) return !!(done[4] && offerCurrentApproved);
         return !!done[n];
       }
       var current = 0;
@@ -863,8 +867,8 @@
           }
 
           if (s.offer) {
-            var docBtns = '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm" id="btn-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button>' +
-              '<button type="button" class="btn btn-ghost btn-sm" id="btn-open-terms">Öppna villkoren &#8599;</button></div>';
+            var docBtns = '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm js-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm js-open-terms">Öppna villkoren &#8599;</button></div>';
             if (!spec) {
               body += '<p class="muted">Kravspecifikationen och offerten sammanställs av OakStride efter uppstartsmötet. Du får ett mejl när den är redo att godkänna.</p>';
             } else if (dn) {
@@ -893,11 +897,18 @@
               if (c5.body) body += '<div class="onb-content-block">' + esc(c5.body).replace(/\n/g, "<br>") + "</div>";
               if (c5.link) { var u = /^https?:\/\//.test(c5.link) ? c5.link : "https://" + c5.link; body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(u) + '" target="_blank" rel="noopener">Öppna sidan &#8599;</a></p>'; }
               if (dn) {
-                body += '<p class="onb-verified">✓ Godkänt ' + fmtDate(done[4]) + "</p>";
+                body += '<p class="onb-verified">✓ Sida & konfiguration godkänd ' + fmtDate(done[4]) + " (offert v" + spec.version + ").</p>";
               } else if (cur) {
-                body += '<p class="muted">Kommer du på något extra? Skicka in det, så uppdaterar vi kravspecen/offerten och du godkänner den igen i steg 3.</p>' +
+                body += '<p class="muted">Kommer du på något extra? Skicka in det — då uppdaterar vi kravspecifikationen och offerten, och du godkänner den uppdaterade versionen här nedan innan vi bygger klart.</p>' +
                   clarFormHtml() +
-                  '<label class="onb-confirm"><input type="checkbox" data-step="4"> <span>Jag godkänner sidan och konfigurationen</span></label>';
+                  '<div class="onb-offer4"><h4>Kravspecifikation & offert (version ' + spec.version + ")</h4>" +
+                  '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm js-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button></div>' +
+                  (offerCurrentApproved
+                    ? '<p class="onb-verified">✓ Du har godkänt den här versionen av offerten.</p>'
+                    : '<label class="onb-confirm"><input type="checkbox" data-approve-offer4="' + spec.version + '"> <span>Jag godkänner den uppdaterade kravspecifikationen och offerten (v' + spec.version + ")</span></label>") +
+                  "</div>" +
+                  '<label class="onb-confirm"><input type="checkbox" data-step="4"' + (offerCurrentApproved ? "" : " disabled") + "> <span>Jag godkänner sidan och konfigurationen</span></label>" +
+                  (offerCurrentApproved ? "" : '<p class="muted onb-hint-sm">Godkänn den uppdaterade offerten ovan först.</p>');
               } else {
                 body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
               }
@@ -921,14 +932,14 @@
 
       var specForView = spec ? spec.data : specFromBrief(brief);
       var specLabel = spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu";
-      var openSpecBtn = document.getElementById("btn-open-spec");
-      if (openSpecBtn) openSpecBtn.addEventListener("click", function () { openSpecWindow(specForView, ordered, specLabel); });
-      var openTermsBtn = document.getElementById("btn-open-terms");
-      if (openTermsBtn) openTermsBtn.addEventListener("click", function () { openTermsWindow(custAgreement); });
-      var bt = document.getElementById("btn-terms");
-      if (bt) bt.addEventListener("click", function () { openTermsWindow(custAgreement); });
+      Array.prototype.forEach.call(box.querySelectorAll(".js-open-spec"), function (b) { b.addEventListener("click", function () { openSpecWindow(specForView, ordered, specLabel); }); });
+      Array.prototype.forEach.call(box.querySelectorAll(".js-open-terms"), function (b) { b.addEventListener("click", function () { openTermsWindow(custAgreement); }); });
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
-        cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
+        cb.addEventListener("change", function () { if (cb.checked && !cb.disabled) checkoffStep(Number(cb.getAttribute("data-step"))); });
+      });
+      var offer4 = box.querySelector("[data-approve-offer4]");
+      if (offer4) offer4.addEventListener("change", function () {
+        if (offer4.checked) approveUpdatedOffer(spec, ordered);
       });
       var clarBtn = box.querySelector("[data-clar]");
       if (clarBtn) clarBtn.addEventListener("click", function () {
@@ -941,6 +952,24 @@
         agreeCb.addEventListener("change", function () { approveOfferBtn.disabled = !agreeCb.checked; });
         approveOfferBtn.addEventListener("click", function () { approveOffer(spec, ordered, approveOfferBtn); });
       }
+    });
+  }
+
+  // Steg 4: godkänn den uppdaterade kravspecen/offerten (faktureringsuppgifter finns redan).
+  function approveUpdatedOffer(spec, ordered) {
+    if (!spec) return;
+    var summary = orderSummaryText(spec.data, ordered);
+    sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
+      sb.from("agreement_acceptances").insert({
+        user_id: session.user.id, agreement_version: custAgreement.version, document_title: custAgreement.title,
+        document_hash: hash, user_agent: navigator.userAgent, order_summary: summary
+      }).then(function (r2) {
+        if (r2.error && r2.error.code !== "23505") { toast("Kunde inte spara: " + r2.error.message, true); return; }
+        sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: spec.version }).then(function () {
+          toast("Tack! Den uppdaterade offerten är godkänd — en ny orderbekräftelse skickas.");
+          loadOnboarding();
+        });
+      });
     });
   }
 

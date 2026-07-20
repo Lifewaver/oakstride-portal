@@ -284,6 +284,9 @@ form .btn{margin-top:1rem}
 .onb-clar textarea{width:100%;min-height:64px;font:inherit;padding:.55rem .65rem;border:1px solid var(--line);border-radius:7px;resize:vertical}
 .onb-clar-hint{font-size:.78rem}
 .onb-docs{display:flex;gap:.6rem;flex-wrap:wrap;margin:.6rem 0 .8rem}
+.onb-offer4{margin:.7rem 0;padding:.7rem .9rem;background:#eef4f0;border:1px solid #d5e4da;border-radius:8px}
+.onb-offer4 h4{margin:0 0 .3rem;color:var(--pine);font-size:.95rem}
+.onb-hint-sm{font-size:.82rem;margin:.2rem 0 0}
 .onb-terms-block{margin:.7rem 0}
 .onb-terms-block h4,.onb-billing h4{margin:0 0 .4rem;color:var(--pine);font-size:.95rem}
 .onb-billing{margin:.7rem 0 .9rem}
