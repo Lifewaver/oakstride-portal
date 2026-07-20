@@ -489,7 +489,7 @@
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
       sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
       sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id),
-      sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false }).limit(1)
+      sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false })
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -499,7 +499,10 @@
       var brief = briefs[0] || null;
       var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
       var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
-      var spec = (out[6].error ? [] : (out[6].data || []))[0] || null;
+      var specs = out[6].error ? [] : (out[6].data || []);
+      var spec = specs[0] || null;
+      // Kunden har gjort en ändring/förtydligande om det finns en kund-genererad version.
+      var hasCustomerChange = specs.some(function (v) { return v.source === "kund"; });
       var done = {}, doneExtras = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
       function extrasLabel(n) { return n === 3 && done[3] ? (doneExtras[3] ? " (med tillägg)" : " (utan tillägg)") : ""; }
 
@@ -579,10 +582,8 @@
             if (s.content && !stepReady(n)) {
               body += '<p class="status-note">Blir tillgängligt när OakStride lagt upp kravbilden/utkastet.</p>';
             } else if (n === 3) {
-              body += '<div class="onb-verify3"><p class="onb-verify3-q">Verifiera kravbilden:</p>' +
-                '<div class="onb-verify3-btns">' +
-                '<button class="btn btn-ghost btn-sm" data-verify3="0">Verifiera utan tillägg</button>' +
-                '<button class="btn btn-primary btn-sm btn-inline" data-verify3="1">Verifiera med tillägg</button></div></div>';
+              body += '<label class="onb-confirm"><input type="checkbox" data-verify3="' + (hasCustomerChange ? "1" : "0") + '"> <span>' +
+                (hasCustomerChange ? "Verifiera med tillägg" : "Verifiera") + "</span></label>";
             } else {
               body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
             }
@@ -651,8 +652,8 @@
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
       });
-      Array.prototype.forEach.call(box.querySelectorAll("[data-verify3]"), function (btn) {
-        btn.addEventListener("click", function () { checkoffStep(3, btn.getAttribute("data-verify3") === "1"); });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-verify3]"), function (cb) {
+        cb.addEventListener("change", function () { if (cb.checked) checkoffStep(3, cb.getAttribute("data-verify3") === "1"); });
       });
       var clarBtn = box.querySelector("[data-clar]");
       if (clarBtn) clarBtn.addEventListener("click", function () {
