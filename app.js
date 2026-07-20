@@ -1223,6 +1223,18 @@
 
   // ---------- Detaljvy (kund + admin) ----------
 
+  function changeItemsToText(arr) {
+    return (arr || []).map(function (i) { return i.label + " | " + (i.amount == null ? "" : i.amount); }).join("\n");
+  }
+  function textToChangeItems(text) {
+    return String(text || "").split("\n").filter(function (l) { return l.trim(); }).map(function (l) {
+      var p = l.split("|");
+      var amt = parseFloat(String(p[1] || "").replace(",", ".").replace(/\s/g, ""));
+      return { label: (p[0] || "").trim(), amount: isNaN(amt) ? null : amt };
+    }).filter(function (i) { return i.label; });
+  }
+  function changeTotal(arr) { return (arr || []).reduce(function (s, i) { return s + (Number(i.amount) || 0); }, 0); }
+
   function renderDetail(id, isAdmin) {
     main.innerHTML = '<div class="spinner"></div>';
     Promise.all([
@@ -1246,16 +1258,45 @@
         previewBlock = '<div class="preview-box"><strong>Förhandsvisning:</strong> ' +
           '<a href="' + esc(r.preview_url) + '" target="_blank" rel="noopener">' + esc(r.preview_url) + "</a></div>";
       }
+      var changeItems = r.change_items || [];
+      var chTotal = changeTotal(changeItems);
+      var hasChange = !!(r.change_note || changeItems.length);
+      var changeSpecHtml =
+        '<div class="change-spec"><h3>Uppdaterad kravspecifikation — nya engångskostnader</h3>' +
+        (r.change_note ? '<div class="detail-desc">' + esc(r.change_note).replace(/\n/g, "<br>") + "</div>" : "") +
+        (changeItems.length
+          ? '<ul class="change-cost-list">' + changeItems.map(function (i) {
+              return "<li><span>" + esc(i.label) + "</span><span>" + (i.amount == null ? "—" : fmtKr(i.amount) + " kr") + "</span></li>";
+            }).join("") +
+            '<li class="change-cost-sum"><span>Ny engångskostnad</span><span>' + fmtKr(chTotal) + " kr</span></li></ul>"
+          : "") +
+        '<p class="muted change-note">Beloppen är engångskostnader exkl. moms för denna ändring. Löpande drift och avtalade timpriser är oförändrade.</p></div>';
+
       var approveBlock = "";
       if (!isAdmin && r.status === "draft_ready") {
         approveBlock =
-          '<div class="approve-box"><p><strong>Ditt förslag är klart!</strong> Titta på förhandsvisningen ovan. ' +
-          "Nöjd? Godkänn så publicerar vi. Vill du justera något — skriv i dialogen nedan så tar vi ett varv till.</p>" +
-          '<button id="btn-approve" class="btn btn-primary btn-inline">Godkänn förslaget</button></div>';
+          '<div class="approve-box"><p><strong>Ditt förslag är klart!</strong> Titta på förhandsvisningen ovan.</p>' +
+          (hasChange ? changeSpecHtml : "") +
+          "<p>Godkänner du vårt svar och förslag på ändring" + (hasChange ? " samt den uppdaterade kravspecifikationen" : "") +
+          "? Vill du justera något — skriv i dialogen nedan så tar vi ett varv till.</p>" +
+          '<button id="btn-approve" class="btn btn-primary btn-inline">Godkänn' +
+          (hasChange ? " förslag &amp; kravspecifikation" : " förslaget") + "</button></div>";
       }
       var agentBlock = "";
       if (isAdmin && ["new", "in_progress", "waiting_customer"].indexOf(r.status) !== -1) {
         agentBlock = '<button id="btn-agent" class="btn btn-primary btn-inline">🤖 Skicka till Claude</button>';
+      }
+      var changeAdminBlock = "";
+      if (isAdmin) {
+        changeAdminBlock =
+          '<div class="card"><h2>Uppdaterad kravspecifikation (nya engångskostnader)</h2>' +
+          '<p class="muted">Beskriv ändringen och lägg de nya engångskostnaderna. Kunden godkänner detta tillsammans med förslaget innan vi publicerar. En rad per kostnad: <em>beskrivning | belopp</em>.</p>' +
+          '<form id="form-change">' +
+          '<label for="ch-note">Ändring i kravspecifikationen</label>' +
+          '<textarea id="ch-note" rows="3" placeholder="Vad ändras eller läggs till…">' + esc(r.change_note || "") + "</textarea>" +
+          '<label for="ch-items">Nya engångskostnader</label>' +
+          '<textarea id="ch-items" rows="3" placeholder="Bokningssystem | 4380&#10;Extra undersida | 1095">' + esc(changeItemsToText(changeItems)) + "</textarea>" +
+          '<button type="submit" class="btn btn-primary btn-inline">Spara</button></form></div>';
       }
       main.innerHTML =
         '<button class="back-link" id="btn-back">&larr; Tillbaka</button>' +
@@ -1268,6 +1309,7 @@
         '<div class="detail-desc">' + esc(r.description) + "</div>" +
         previewBlock + approveBlock + agentBlock +
         "</div>" +
+        changeAdminBlock +
         '<div class="card"><h2>Dialog</h2><div id="comments">' +
         (comments.length ? comments.map(function (c) {
           var isClaude = !c.author_id;
@@ -1317,6 +1359,21 @@
             else toast("Status uppdaterad.");
           });
         });
+        var formChange = document.getElementById("form-change");
+        if (formChange) {
+          formChange.addEventListener("submit", function (e) {
+            e.preventDefault();
+            var note = document.getElementById("ch-note").value.trim();
+            var items = textToChangeItems(document.getElementById("ch-items").value);
+            var btn = formChange.querySelector("button");
+            btn.disabled = true;
+            sb.from("requests").update({ change_note: note || null, change_items: items.length ? items : null }).eq("id", id).then(function (res) {
+              btn.disabled = false;
+              if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
+              toast("Uppdaterad kravspecifikation sparad.");
+            });
+          });
+        }
       }
 
       document.getElementById("form-comment").addEventListener("submit", function (e) {

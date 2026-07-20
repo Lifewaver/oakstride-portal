@@ -146,6 +146,14 @@ form .btn{margin-top:1rem}
   border:1px solid var(--moss);
 }
 .approve-box p{margin-bottom:.75rem;font-size:.95rem}
+.change-spec{margin:.75rem 0;padding:.85rem 1rem;background:#fff;border:1px solid var(--line);border-radius:10px}
+.change-spec h3{margin:0 0 .5rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.04em;color:var(--pine)}
+.change-cost-list{list-style:none;margin:.5rem 0 0;padding:0;font-size:.95rem}
+.change-cost-list li{display:flex;justify-content:space-between;gap:1rem;padding:.35rem 0;border-bottom:1px solid var(--line)}
+.change-cost-list li:last-child{border-bottom:0}
+.change-cost-sum{font-weight:600}
+.change-cost-sum span:last-child{color:var(--pine)}
+.change-note{font-size:.82rem;margin-top:.5rem}
 
 .empty{
   text-align:center;padding:3rem 1rem;color:#8a918a;background:#fff;
