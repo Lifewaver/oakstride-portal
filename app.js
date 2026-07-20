@@ -83,6 +83,19 @@
     }
   }
 
+  var ONBOARDING_STEPS = [
+    "Uppstartsmöte — vi går igenom mål, innehåll och design",
+    "Designriktning — vi enas om utseende och struktur",
+    "Vi bygger din sida",
+    "Din granskning — ett korrekturvarv",
+    "Tillägg — vi går igenom eventuella tillval (t.ex. e-post) och du bekräftar",
+    "Lansering på din domän",
+    "Klart — överlämning till löpande drift"
+  ];
+
+  function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
+  function addonPrice(a) { return fmtKr(a.price) + " kr" + (a.billing === "manad" ? "/mån" : " (engång)"); }
+
   var sb = null;
   var session = null;
   var profile = null;
@@ -390,6 +403,7 @@
     var firstName = (profile.full_name || "").split(" ")[0];
     main.innerHTML =
       '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
+      '<div id="onboarding-box"></div>' +
       '<div class="dash-grid">' +
         '<div class="card dash-site"><h2>Din hemsida</h2>' +
         (siteUrl
@@ -414,6 +428,68 @@
     document.getElementById("btn-terms").addEventListener("click", function () { renderTermsView(renderCustomer); });
     loadRequests(false);
     loadStats(site);
+    loadOnboarding();
+  }
+
+  function loadOnboarding() {
+    var box = document.getElementById("onboarding-box");
+    if (!box) return;
+    sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at").then(function (res) {
+      if (!box.isConnected) return;
+      var addons = res.error ? [] : (res.data || []);
+      var stage = profile.onboarding_stage || 1;
+      var showSteps = stage < 7;
+      var proposed = addons.filter(function (a) { return a.status === "proposed"; });
+      var ordered = addons.filter(function (a) { return a.status === "ordered"; });
+      if (!showSteps && !proposed.length && !ordered.length) { box.innerHTML = ""; return; }
+      var html = "";
+      if (showSteps) {
+        html += '<div class="card onb-card"><h2>Så sätter vi upp din sida</h2>' +
+          '<p class="muted">Här ser du var vi är i uppstarten. Vid steg 5 tar vi ställning till eventuella tillägg tillsammans.</p>' +
+          '<ol class="onb-steps">' + ONBOARDING_STEPS.map(function (s, i) {
+            var n = i + 1, cls = n < stage ? "done" : (n === stage ? "current" : "");
+            return '<li class="' + cls + '"><span class="onb-dot">' + (n < stage ? "✓" : n) + "</span><span>" + esc(s) + "</span></li>";
+          }).join("") + "</ol></div>";
+      }
+      if (proposed.length) {
+        html += '<div class="card onb-card"><h2>Tillägg att ta ställning till</h2>' +
+          '<p class="muted">Vi föreslår följande tillval till din sida. Beställ det du vill ha — du bekräftar priset här, inget dras utan ditt godkännande.</p>' +
+          proposed.map(function (a) { return addonRowHtml(a, true); }).join("") + "</div>";
+      }
+      if (ordered.length) {
+        var eng = 0, man = 0;
+        ordered.forEach(function (a) { if (a.billing === "manad") man += Number(a.price); else eng += Number(a.price); });
+        html += '<div class="card onb-card"><h2>Beställda tillägg</h2>' +
+          ordered.map(function (a) { return addonRowHtml(a, false); }).join("") +
+          '<p class="onb-sum">' + (eng ? "Engång: " + fmtKr(eng) + " kr" : "") +
+          (eng && man ? " · " : "") + (man ? "Löpande: " + fmtKr(man) + " kr/mån" : "") +
+          " <span class=\"muted\">(exkl. moms)</span></p></div>";
+      }
+      box.innerHTML = html;
+      Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
+        btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-decline]"), function (btn) {
+        btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-decline")), "declined"); });
+      });
+    });
+  }
+
+  function addonRowHtml(a, actionable) {
+    var actions = actionable
+      ? '<div class="addon-actions"><button class="btn btn-primary btn-sm btn-inline" data-order="' + a.id + '">Beställ</button>' +
+        '<button class="btn btn-ghost btn-sm" data-decline="' + a.id + '">Avböj</button></div>'
+      : '<span class="chip chip-approved">Beställd</span>';
+    return '<div class="addon"><div class="addon-main"><strong>' + esc(a.title) + "</strong> · " + esc(addonPrice(a)) +
+      (a.description ? '<div class="muted addon-desc">' + esc(a.description) + "</div>" : "") + "</div>" + actions + "</div>";
+  }
+
+  function decideAddon(id, status) {
+    sb.from("addons").update({ status: status }).eq("id", id).then(function (res) {
+      if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
+      toast(status === "ordered" ? "Tillägg beställt — tack!" : "Tillägg avböjt.");
+      loadOnboarding();
+    });
   }
 
   function loadStats(site) {
@@ -661,7 +737,8 @@
         rows.map(function (p) {
           return "<tr data-id='" + esc(p.id) + "'>" +
             "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
-            (p.company ? "<br>" + esc(p.company) : "") + "</td>" +
+            (p.company ? "<br>" + esc(p.company) : "") +
+            "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Uppstart &amp; tillägg &rarr;</button></td>" +
             '<td><input type="text" class="inp-site" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></td>' +
             '<td><input type="text" class="inp-repo" value="' + esc(p.github_repo || "") + '" placeholder="ägare/repo"></td>' +
             "<td>" + fmtDate(p.created_at) + "</td>" +
@@ -687,6 +764,83 @@
           sb.from("profiles").update({ github_repo: e.target.value.trim() || null }).eq("id", pid).then(function (res2) {
             if (res2.error) toast("Kunde inte spara repo: " + res2.error.message, true);
             else toast("GitHub-repo sparat.");
+          });
+        });
+        var mng = tr.querySelector(".btn-manage");
+        if (mng) mng.addEventListener("click", function () { renderAdminCustomerDetail(pid); });
+      });
+    });
+  }
+
+  // ---------- Admin: uppstart & tillägg per kund ----------
+
+  function adminAddonList(addons) {
+    if (!addons.length) return '<p class="muted">Inga tillägg föreslagna ännu.</p>';
+    return addons.map(function (a) {
+      var st = a.status === "ordered" ? '<span class="chip chip-approved">Beställd</span>'
+        : (a.status === "declined" ? '<span class="chip chip-done">Avböjd</span>'
+          : '<span class="chip chip-questions">Väntar på kund</span>');
+      var del = a.status === "proposed" ? ' <button class="linklike" data-del="' + a.id + '">Ta bort</button>' : "";
+      return '<div class="addon"><div class="addon-main"><strong>' + esc(a.title) + "</strong> · " + esc(addonPrice(a)) + " " + st +
+        (a.description ? '<div class="muted addon-desc">' + esc(a.description) + "</div>" : "") + "</div>" + del + "</div>";
+    }).join("");
+  }
+
+  function renderAdminCustomerDetail(pid) {
+    main.innerHTML = '<div class="spinner"></div>';
+    Promise.all([
+      sb.from("profiles").select("*").eq("id", pid).single(),
+      sb.from("addons").select("*").eq("user_id", pid).order("created_at")
+    ]).then(function (out) {
+      var p = out[0].data, addons = out[1].data || [];
+      if (out[0].error || !p) { toast("Kunde inte hämta kunden.", true); renderAdminCustomers(); return; }
+      var stage = p.onboarding_stage || 1;
+      main.innerHTML =
+        '<button class="back-link" id="btn-back">&larr; Tillbaka till kunder</button>' +
+        '<div class="card"><h1>' + esc(p.full_name || p.email) + "</h1>" +
+        '<p class="muted">' + esc(p.email) + (p.company ? " · " + esc(p.company) : "") + (p.website ? " · " + esc(p.website) : "") + "</p>" +
+        '<label for="onb-stage">Uppstartssteg (det kunden ser som pågående)</label>' +
+        '<select id="onb-stage">' + ONBOARDING_STEPS.map(function (s, i) {
+          var n = i + 1; return '<option value="' + n + '"' + (stage === n ? " selected" : "") + ">" + n + ". " + esc(s) + "</option>";
+        }).join("") + "</select></div>" +
+        '<div class="card"><h2>Föreslå tillägg</h2>' +
+        '<p class="muted">Kunden får ett mejl och kan beställa eller avböja i portalen.</p>' +
+        '<form id="form-addon">' +
+        '<label for="a-title">Titel *</label><input type="text" id="a-title" required placeholder="t.ex. E-postlösning (Microsoft 365)">' +
+        '<label for="a-desc">Beskrivning</label><textarea id="a-desc" placeholder="Vad ingår, ev. att priset är självkostnad, osv."></textarea>' +
+        '<div class="addon-form-row">' +
+        '<div><label for="a-price">Pris (kr, exkl. moms) *</label><input type="text" id="a-price" required placeholder="150"></div>' +
+        '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div>' +
+        "</div>" +
+        '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form></div>' +
+        '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>";
+
+      document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
+      document.getElementById("onb-stage").addEventListener("change", function (e) {
+        sb.from("profiles").update({ onboarding_stage: Number(e.target.value) }).eq("id", pid).then(function (r) {
+          if (r.error) toast("Kunde inte spara steg: " + r.error.message, true); else toast("Uppstartssteg uppdaterat.");
+        });
+      });
+      document.getElementById("form-addon").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var price = parseFloat(document.getElementById("a-price").value.replace(",", ".").replace(/\s/g, ""));
+        if (isNaN(price) || price < 0) { toast("Ange ett giltigt pris.", true); return; }
+        sb.from("addons").insert({
+          user_id: pid,
+          title: document.getElementById("a-title").value.trim(),
+          description: document.getElementById("a-desc").value.trim() || null,
+          price: price,
+          billing: document.getElementById("a-billing").value
+        }).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          toast("Tillägg föreslaget — kunden aviseras.");
+          renderAdminCustomerDetail(pid);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll("#admin-addons [data-del]"), function (btn) {
+        btn.addEventListener("click", function () {
+          sb.from("addons").delete().eq("id", Number(btn.getAttribute("data-del"))).then(function (r) {
+            if (r.error) toast("Kunde inte ta bort: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
       });

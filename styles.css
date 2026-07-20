@@ -226,3 +226,22 @@ form .btn{margin-top:1rem}
   font-weight:500;color:var(--ink);font-size:.95rem;margin:.25rem 0 1rem;
 }
 .agree-check input{width:auto;margin-top:.2rem;flex:none}
+
+/* Uppstart & tillägg */
+.onb-card{margin-bottom:1rem}
+.onb-steps{list-style:none;margin:.6rem 0 0;padding:0;display:flex;flex-direction:column;gap:.55rem}
+.onb-steps li{display:flex;align-items:flex-start;gap:.7rem;font-size:.95rem;color:#5b635a}
+.onb-steps li.current{color:var(--pine);font-weight:600}
+.onb-steps li.done{color:var(--moss)}
+.onb-dot{flex:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;font-weight:600;background:var(--birch);color:#8a918a;border:1px solid var(--line)}
+.onb-steps li.done .onb-dot{background:var(--moss);color:#fff;border-color:var(--moss)}
+.onb-steps li.current .onb-dot{background:var(--pine);color:#fff;border-color:var(--pine)}
+.onb-sum{margin-top:.75rem;font-weight:600;color:var(--pine)}
+.addon{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:.8rem 0;border-top:1px solid var(--line)}
+.addon:first-of-type{border-top:none}
+.addon-main{flex:1;min-width:200px}
+.addon-desc{margin-top:.2rem;font-size:.88rem}
+.addon-actions{display:flex;gap:.5rem;align-items:center}
+.addon-form-row{display:flex;gap:1rem;flex-wrap:wrap}
+.addon-form-row>div{flex:1;min-width:140px}
