@@ -36,39 +36,48 @@
 
   // Kundvillkor som visas och godkänns i portalen. Bumpa "version" när texten ändras
   // → alla kunder får godkänna på nytt. Hash av (version + text) loggas som bevis.
-  var AGREEMENT = {
-    version: "2026-07-20b",
-    title: "OakStrides kundvillkor",
-    html: [
-      "<h3>1. Om avtalet</h3>",
-      '<p>Dessa villkor gäller mellan OakStride AB ("OakStride") och dig som kund för design, byggnation och löpande omhändertagande av din webbplats. De kompletterar det kundavtal med bilagor som tecknats mellan parterna; vid motstridighet gäller det undertecknade avtalet.</p>',
-      "<h3>2. Standardwebbplats</h3>",
-      "<p>En Standardwebbplats levereras till fast pris och omfattar upp till fem (5) sidor, mallbaserad och mobilanpassad design med din logotyp och dina färger, grundläggande SEO, ett kontaktformulär, koppling av din domän och e-post, inläggning av innehåll som du levererar färdigt, tre (3) uppstartsmöten samt ett (1) korrekturvarv. Arbete utöver detta (t.ex. fler sidor, e-handel, inloggning, specialfunktioner, flerspråkighet eller formgivning från grunden) ingår inte och debiteras per timme.</p>",
-      "<h3>3. Priser (exkl. moms)</h3>",
-      "<ul><li><strong>Standardwebbplats:</strong> 3 000 kr som engångskostnad, faktureras vid beställning.</li>" +
-      "<li><strong>Löpande drift:</strong> 150 kr/mån — hosting, DNS- och domänskötsel, certifikat, säkerhet, säkerhetskopiering och tillgång till kundportalen. Inga ändringar ingår i driften.</li>" +
-      "<li><strong>Ändringar och utveckling efter lansering:</strong> 1 095 kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart.</li>" +
-      "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme (på din begäran).</li>" +
-      "<li><strong>Tredjepartskostnader:</strong> domänavgift, e-post (t.ex. Microsoft 365) och andra externa tjänster ingår inte utan betalas av dig till självkostnad — du kan även teckna dem själv.</li></ul>",
-      "<h3>4. Så beställer du ändringar</h3>",
-      "<p>Ändringsönskemål lämnas i den här kundportalen. Du får en tidsuppskattning och, efter ditt godkännande, ett utkast med förhandsvisning. Ingenting publiceras utan ditt godkännande. Nedlagd tid debiteras enligt punkt 3.</p>",
-      "<h3>5. Betalning</h3>",
-      "<p>Betalningsvillkor 20 dagar netto. Månadsavgiften för drift faktureras i förskott. Vid försenad betalning utgår dröjsmålsränta enligt räntelagen samt lagstadgad påminnelseavgift.</p>",
-      "<h3>6. Avtalstid och uppsägning</h3>",
-      "<p>Driften löper tills vidare med en (1) månads ömsesidig uppsägningstid. Uppstartsprojektet avslutas vid godkänd leverans.</p>",
-      "<h3>7. Du äger din sajt</h3>",
-      "<p>Efter full betalning äger du ditt innehåll och har obegränsad nyttjanderätt till den levererade webbplatsen. Vid uppsägning lämnar OakStride utan extra kostnad över en komplett kopia av webbplatsens filer och innehåll samt domänen — du är aldrig inlåst.</p>",
-      "<h3>8. Användning av AI</h3>",
-      "<p>OakStride använder AI-verktyg som stöd i arbetet. Alla utkast granskas av en människa innan publicering, och ditt material används inte för att träna AI-modeller.</p>",
-      "<h3>9. Personuppgifter</h3>",
-      "<p>Vardera parten ansvarar för sin egen behandling av personuppgifter. Behandlar OakStride personuppgifter för din räkning upprättas ett personuppgiftsbiträdesavtal.</p>",
-      "<h3>10. Ansvar</h3>",
-      "<p>OakStride utför tjänsterna fackmässigt. OakStride ansvarar inte för indirekt skada, och det sammanlagda ansvaret per tolvmånadersperiod är begränsat till de avgifter du betalat under samma period. Begränsningen gäller inte vid uppsåt eller grov vårdslöshet.</p>",
-      "<h3>11. Tvist</h3>",
-      "<p>Svensk rätt tillämpas. Tvist avgörs av svensk allmän domstol med Stockholms tingsrätt som första instans.</p>",
-      '<p class="fineprint">Genom att godkänna bekräftar du att du har behörighet att ingå avtalet för kundens räkning och att du läst och accepterat dessa villkor. Godkännandet loggas med tidpunkt och en kontrollsumma av villkorstexten, och en bekräftelse skickas till din e-post.</p>'
-    ].join("")
-  };
+  var DEFAULT_PRICING = { site_price: 3000, drift_month: 150, rate_setup: 1095, rate_change: 1095 };
+  var pricing = { site_price: 3000, drift_month: 150, rate_setup: 1095, rate_change: 1095 };
+
+  // Villkoren renderas från de aktuella priserna. Ändras ett pris blir det en ny version.
+  function buildAgreement(p) {
+    var site = fmtKr(p.site_price), drift = fmtKr(p.drift_month), setup = fmtKr(p.rate_setup), change = fmtKr(p.rate_change);
+    return {
+      version: "2026-07-21a-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
+      title: "OakStrides kundvillkor",
+      html: [
+        "<h3>1. Om avtalet</h3>",
+        '<p>Dessa villkor gäller mellan OakStride AB ("OakStride") och dig som kund för design, byggnation och löpande omhändertagande av din webbplats. De kompletterar det kundavtal med bilagor som tecknats mellan parterna; vid motstridighet gäller det undertecknade avtalet.</p>',
+        "<h3>2. Standardwebbplats</h3>",
+        "<p>En Standardwebbplats levereras till fast pris och omfattar upp till fem (5) sidor, mallbaserad och mobilanpassad design med din logotyp och dina färger, grundläggande SEO, ett kontaktformulär, koppling av din domän och e-post, inläggning av innehåll som du levererar färdigt, tre (3) uppstartsmöten samt ett (1) korrekturvarv. Arbete utöver detta (t.ex. fler sidor, e-handel, inloggning, specialfunktioner, flerspråkighet eller formgivning från grunden) ingår inte och debiteras per timme.</p>",
+        "<h3>3. Priser (exkl. moms)</h3>",
+        "<ul><li><strong>Standardwebbplats:</strong> " + site + " kr som engångskostnad, faktureras vid beställning.</li>" +
+        "<li><strong>Löpande drift:</strong> " + drift + " kr/mån — hosting, DNS- och domänskötsel, certifikat, säkerhet, säkerhetskopiering och tillgång till kundportalen. Inga ändringar ingår i driften.</li>" +
+        "<li><strong>Uppsättningsarbete utöver standardsidan:</strong> " + setup + " kr/timme (t.ex. e-postuppsättning eller specialfunktioner under bygget), enligt godkänd uppskattning.</li>" +
+        "<li><strong>Ändringar och löpande arbete efter lansering:</strong> " + change + " kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart.</li>" +
+        "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme (på din begäran).</li>" +
+        "<li><strong>Tredjepartskostnader:</strong> domänavgift, e-post (t.ex. Microsoft 365) och andra externa tjänster ingår inte utan betalas av dig till självkostnad — du kan även teckna dem själv.</li></ul>",
+        "<h3>4. Så beställer du ändringar</h3>",
+        "<p>Ändringsönskemål lämnas i den här kundportalen. Du får en tidsuppskattning och, efter ditt godkännande, ett utkast med förhandsvisning. Ingenting publiceras utan ditt godkännande. Nedlagd tid debiteras enligt punkt 3.</p>",
+        "<h3>5. Betalning</h3>",
+        "<p>Betalningsvillkor 20 dagar netto. Månadsavgiften för drift faktureras i förskott. Vid försenad betalning utgår dröjsmålsränta enligt räntelagen samt lagstadgad påminnelseavgift.</p>",
+        "<h3>6. Avtalstid och uppsägning</h3>",
+        "<p>Driften löper tills vidare med en (1) månads ömsesidig uppsägningstid. Uppstartsprojektet avslutas vid godkänd leverans.</p>",
+        "<h3>7. Du äger din sajt</h3>",
+        "<p>Efter full betalning äger du ditt innehåll och har obegränsad nyttjanderätt till den levererade webbplatsen. Vid uppsägning lämnar OakStride utan extra kostnad över en komplett kopia av webbplatsens filer och innehåll samt domänen — du är aldrig inlåst.</p>",
+        "<h3>8. Användning av AI</h3>",
+        "<p>OakStride använder AI-verktyg som stöd i arbetet. Alla utkast granskas av en människa innan publicering, och ditt material används inte för att träna AI-modeller.</p>",
+        "<h3>9. Personuppgifter</h3>",
+        "<p>Vardera parten ansvarar för sin egen behandling av personuppgifter. Behandlar OakStride personuppgifter för din räkning upprättas ett personuppgiftsbiträdesavtal.</p>",
+        "<h3>10. Ansvar</h3>",
+        "<p>OakStride utför tjänsterna fackmässigt. OakStride ansvarar inte för indirekt skada, och det sammanlagda ansvaret per tolvmånadersperiod är begränsat till de avgifter du betalat under samma period. Begränsningen gäller inte vid uppsåt eller grov vårdslöshet.</p>",
+        "<h3>11. Tvist</h3>",
+        "<p>Svensk rätt tillämpas. Tvist avgörs av svensk allmän domstol med Stockholms tingsrätt som första instans.</p>",
+        '<p class="fineprint">Genom att godkänna bekräftar du att du har behörighet att ingå avtalet för kundens räkning och att du läst och accepterat dessa villkor. Godkännandet loggas med tidpunkt och en kontrollsumma av villkorstexten, och en bekräftelse skickas till din e-post.</p>'
+      ].join("")
+    };
+  }
+  var AGREEMENT = buildAgreement(pricing);
 
   function sha256Hex(str) {
     try {
@@ -187,7 +196,6 @@
     return '<details class="spec-page"><summary class="spec-page-sum"><span class="spec-page-name">' + esc(p.text) + "</span> " + tierBadge(p.tier) +
       '<span class="spec-page-chev" aria-hidden="true">▾</span></summary><div class="spec-page-body">' + inner + "</div></details>";
   }
-  var HOURLY_RATE = 1095; // kr/tim, exkl. moms (enligt prismodellen)
   function fmtHours(n) { return Number(n || 0).toLocaleString("sv-SE"); }
   function periodSuffix(p) { return p === "manad" ? "/mån" : (p === "ar" ? "/år" : (p === "engang" ? " (engång)" : "")); }
   function parsePeriod(s) {
@@ -231,10 +239,9 @@
     { n: 2, title: "Sidan & innehåll", keys: ["design", "sidor", "funktioner", "innehall", "fortydliganden", "ovrigt"], cost: "build" },
     { n: 3, title: "Drift", keys: ["drift"], domain: true, cost: "drift" }
   ];
-  var STANDARD_SITE_PRICE = 3000, DRIFT_MONTH = 150;
   function specSecTitle(key) { for (var i = 0; i < SPEC_SECTIONS.length; i++) { if (SPEC_SECTIONS[i].key === key) return SPEC_SECTIONS[i].title; } return key; }
-  function specSitePrice(d) { return d && d.pricing && d.pricing.site != null && d.pricing.site !== "" ? Number(d.pricing.site) : STANDARD_SITE_PRICE; }
-  function specDriftPrice(d) { return d && d.pricing && d.pricing.drift != null && d.pricing.drift !== "" ? Number(d.pricing.drift) : DRIFT_MONTH; }
+  function specSitePrice(d) { return d && d.pricing && d.pricing.site != null && d.pricing.site !== "" ? Number(d.pricing.site) : Number(pricing.site_price); }
+  function specDriftPrice(d) { return d && d.pricing && d.pricing.drift != null && d.pricing.drift !== "" ? Number(d.pricing.drift) : Number(pricing.drift_month); }
   function specSecInner(key, sections) {
     var items = sections[key] || [];
     if (key === "sidor") return items.length ? '<div class="spec-pages">' + items.map(renderSpecPage).join("") + "</div>" : '<p class="muted spec-empty">Fylls i efter hand.</p>';
@@ -263,13 +270,13 @@
         var totalH = eh.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
         var engAddons = addons.filter(function (a) { return a.billing !== "manad"; });
         var engSum = engAddons.reduce(function (s, a) { return s + Number(a.price || 0); }, 0);
-        var totalEng = sitePrice + Math.round(totalH * HOURLY_RATE) + engSum;
+        var totalEng = sitePrice + Math.round(totalH * pricing.rate_setup) + engSum;
         html += '<div class="spec-cost-box"><h4>Kostnad — engång (exkl. moms)</h4><ul class="spec-cost-list">' +
           "<li><span>Standardsida</span><span>" + fmtKr(sitePrice) + " kr</span></li>" +
-          eh.map(function (i) { return "<li><span>" + esc(i.label) + " (" + fmtHours(i.hours) + " tim)</span><span>" + fmtKr(Math.round((Number(i.hours) || 0) * HOURLY_RATE)) + " kr</span></li>"; }).join("") +
+          eh.map(function (i) { return "<li><span>" + esc(i.label) + " (" + fmtHours(i.hours) + " tim)</span><span>" + fmtKr(Math.round((Number(i.hours) || 0) * pricing.rate_setup)) + " kr</span></li>"; }).join("") +
           engAddons.map(function (a) { return "<li><span>" + esc(a.title) + "</span><span>" + fmtKr(a.price) + " kr</span></li>"; }).join("") +
           '<li class="spec-cost-sum"><span>Summa engång</span><span>' + fmtKr(totalEng) + " kr</span></li></ul>" +
-          (eh.length ? '<p class="muted spec-note">Extra arbete debiteras per nedlagd timme à ' + fmtKr(HOURLY_RATE) + " kr; beloppet ovan är en uppskattning.</p>" : "") + "</div>";
+          (eh.length ? '<p class="muted spec-note">Extra arbete debiteras per nedlagd timme à ' + fmtKr(pricing.rate_setup) + " kr; beloppet ovan är en uppskattning.</p>" : "") + "</div>";
       } else if (av.cost === "drift") {
         var driftPrice = specDriftPrice(data);
         var manAddons = addons.filter(function (a) { return a.billing === "manad"; });
@@ -283,7 +290,8 @@
             ? '<h4 class="spec-cost-sub">Tredjepart (självkostnad)</h4><ul class="spec-cost-list">' +
               rc.map(function (i) { return "<li><span>" + esc(i.label) + "</span><span>" + (i.amount == null || i.amount === "" ? "" : fmtKr(i.amount) + " kr" + periodSuffix(i.period)) + "</span></li>"; }).join("") +
               '</ul><p class="muted spec-note">Vidarefaktureras till självkostnad.</p>'
-            : "") + "</div>";
+            : "") +
+          '<p class="muted spec-note">Ändringar och löpande arbete efter lansering debiteras ' + fmtKr(pricing.rate_change) + " kr/tim.</p></div>";
       }
       html += "</section>";
     });
@@ -353,7 +361,7 @@
       });
       if (av.cost === "build") {
         html += '<div class="se-sec"><h4>Grundpris standardsida (kr, engång)</h4><input type="text" id="spec-site-price" class="se-price" value="' + esc(specSitePrice(d)) + '"></div>' +
-          '<div class="se-sec" data-block="extra"><h4>Extra arbete (' + fmtKr(HOURLY_RATE) + ' kr/tim)</h4>' +
+          '<div class="se-sec" data-block="extra"><h4>Extra arbete (' + fmtKr(pricing.rate_setup) + ' kr/tim)</h4>' +
           '<div class="se-rows se-rows-extra">' + (d.extra_hours || []).map(seExtraRow).join("") + "</div>" +
           '<button type="button" class="se-add-extra btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
       } else if (av.cost === "drift") {
@@ -490,8 +498,17 @@
   sb.auth.getSession().then(function (res) {
     session = res.data.session;
     if (!session) { show("login"); return; }
-    loadProfileAndRoute();
+    loadPricing().then(loadProfileAndRoute);
   });
+
+  function loadPricing() {
+    return sb.from("pricing_settings").select("*").eq("id", 1).maybeSingle().then(function (r) {
+      if (r && r.data) {
+        pricing = { site_price: Number(r.data.site_price), drift_month: Number(r.data.drift_month), rate_setup: Number(r.data.rate_setup), rate_change: Number(r.data.rate_change) };
+        AGREEMENT = buildAgreement(pricing);
+      }
+    }, function () {});
+  }
 
   function loadProfileAndRoute() {
     sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle().then(function (res) {
@@ -877,7 +894,7 @@
         var th = extraHours.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
         html += '<div class="card onb-card"><h2>Godkänn extra arbete</h2>' +
           '<p class="muted">Utöver standardsidan tillkommer extra arbete (se ”Extra arbete” i kravspecifikationen ovan) — uppskattat ' +
-          fmtHours(th) + " tim ≈ " + fmtKr(Math.round(th * HOURLY_RATE)) + ' kr, exkl. moms. Det debiteras per nedlagd timme à ' + fmtKr(HOURLY_RATE) + " kr. Godkänn att vi får utföra och fakturera det.</p>" +
+          fmtHours(th) + " tim ≈ " + fmtKr(Math.round(th * pricing.rate_setup)) + ' kr, exkl. moms. Det debiteras per nedlagd timme à ' + fmtKr(pricing.rate_setup) + " kr. Godkänn att vi får utföra och fakturera det.</p>" +
           (extraApproved
             ? '<p class="onb-verified">✓ Du har godkänt det extra arbetet (version ' + spec.version + ").</p>"
             : '<label class="onb-confirm"><input type="checkbox" data-approve-extra="' + spec.version + '"> <span>Jag godkänner det extra arbetet och att det faktureras per timme</span></label>') +
@@ -1214,6 +1231,7 @@
   function renderAdmin() {
     if (adminTab === "kunder") return renderAdminCustomers();
     if (adminTab === "briefs") return renderAdminBriefs();
+    if (adminTab === "priser") return renderAdminPriser();
     main.innerHTML =
       '<div class="page-head"><h1>Alla ärenden</h1>' +
       '<div class="filter-row"><select id="status-filter">' +
@@ -1223,6 +1241,36 @@
       '<div id="req-list" class="req-list"><div class="spinner"></div></div>';
     document.getElementById("status-filter").addEventListener("change", function () { loadRequests(true); });
     loadRequests(true);
+  }
+
+  function renderAdminPriser() {
+    main.innerHTML = '<div class="spinner"></div>';
+    sb.from("pricing_settings").select("*").eq("id", 1).maybeSingle().then(function (res) {
+      var p = (res && res.data) ? res.data : DEFAULT_PRICING;
+      function pf(id, label, val) { return '<label for="' + id + '">' + esc(label) + '</label><input type="text" id="' + id + '" class="se-price" value="' + esc(val) + '">'; }
+      main.innerHTML =
+        '<div class="card" style="max-width:560px"><h1>Priser &amp; villkor</h1>' +
+        '<p class="muted">Standardpriserna används som förifyllda värden i kravspecen och visas i kundvillkoren. Ändrar du ett pris uppdateras villkoren automatiskt till en ny version (som kunder godkänner på nytt).</p>' +
+        '<form id="form-pricing">' +
+        pf("p-site", "Standardwebbplats (kr, engång)", p.site_price) +
+        pf("p-drift", "Löpande drift (kr/mån)", p.drift_month) +
+        pf("p-setup", "Timpris — uppsättning (kr/tim)", p.rate_setup) +
+        pf("p-change", "Timpris — ändringar & drift framöver (kr/tim)", p.rate_change) +
+        '<button type="submit" class="btn btn-primary btn-inline">Spara priser</button></form>' +
+        '<p class="muted" style="margin-top:1.2rem"><strong>Obs:</strong> avtalsmallarna (Word-dokumenten i OneDrive) uppdateras inte automatiskt — säg till så regenererar jag dem med de nya priserna.</p></div>';
+      document.getElementById("form-pricing").addEventListener("submit", function (e) {
+        e.preventDefault();
+        function num(id) { var v = parseFloat(document.getElementById(id).value.replace(",", ".").replace(/\s/g, "")); return isNaN(v) ? null : v; }
+        var row = { id: 1, site_price: num("p-site"), drift_month: num("p-drift"), rate_setup: num("p-setup"), rate_change: num("p-change"), updated_at: new Date().toISOString() };
+        if (row.site_price == null || row.drift_month == null || row.rate_setup == null || row.rate_change == null) { toast("Fyll i alla priser med siffror.", true); return; }
+        sb.from("pricing_settings").upsert(row).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          pricing = { site_price: row.site_price, drift_month: row.drift_month, rate_setup: row.rate_setup, rate_change: row.rate_change };
+          AGREEMENT = buildAgreement(pricing);
+          toast("Priser sparade — villkoren uppdaterade.");
+        });
+      });
+    });
   }
 
   var BRIEF_STATUS = { new: "Ny", contacted: "Kontaktad", converted: "Kund", archived: "Arkiverad" };
