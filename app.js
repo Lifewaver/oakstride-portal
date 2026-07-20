@@ -436,7 +436,7 @@
             if (isCur) {
               body = '<div class="onb-step-desc">' + esc(s.desc) + "</div>" +
                 (s.mail ? '<p class="onb-step-desc"><a href="mailto:info@oakstride.se?subject=Mina%20önskemål%20och%20referenssajter">Öppna ett mejl till info@oakstride.se &rarr;</a></p>' : "") +
-                '<button class="btn btn-primary btn-sm btn-inline" data-step="' + n + '">' + esc(s.cta) + "</button>";
+                '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
             }
             return '<li class="' + cls + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
               '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) +
@@ -486,8 +486,8 @@
           ab.addEventListener("click", function () { acceptTerms(ab); });
         }
       }
-      Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (btn) {
-        btn.addEventListener("click", function () { checkoffStep(Number(btn.getAttribute("data-step"))); });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
+        cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
       });
       Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
         btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
