@@ -1404,12 +1404,15 @@
         '<textarea id="c5" rows="3" placeholder="Valfritt: vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
         '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
         '<div class="card"><h2>Kravspecifikation' + (latestSpec ? " — v" + latestSpec.version : " — ingen version ännu") + "</h2>" +
-        '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Att spara skapar en ny version.</p>' +
+        '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Förhandsvisningen till höger uppdateras medan du skriver. Att spara skapar en ny version.</p>' +
+        '<div class="spec-edit-wrap">' +
         '<form id="form-spec">' +
         specEditorHtml(specData) +
         '<label for="spec-note" class="se-note-label">Ändringsnotering (vad ändras i denna version)</label>' +
         '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
         '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></form>' +
+        '<div class="spec-preview-pane"><div class="spec-preview-h">Förhandsvisning — så här ser kunden det</div><div id="spec-preview"></div></div>' +
+        "</div>" +
         (latestSpec && (specData.extra_hours || []).length
           ? '<p class="' + (latestExtraApproved ? "onb-verified" : "status-note") + '">' +
             (latestExtraApproved ? "✓ Kunden har godkänt det extra arbetet (v" + latestSpec.version + ")." : "Kunden har ännu inte godkänt det extra arbetet (v" + latestSpec.version + ").") + "</p>"
@@ -1488,6 +1491,14 @@
       });
       var specForm = document.getElementById("form-spec");
       wireSpecEditor(specForm);
+      function updateSpecPreview() {
+        var pv = document.getElementById("spec-preview");
+        if (pv) pv.innerHTML = renderSpecView(readSpecEditor(specForm), ordered, null);
+      }
+      specForm.addEventListener("input", updateSpecPreview);
+      specForm.addEventListener("change", updateSpecPreview);
+      specForm.addEventListener("click", function () { updateSpecPreview(); });
+      updateSpecPreview();
       specForm.addEventListener("submit", function (e) {
         e.preventDefault();
         var data = readSpecEditor(specForm);
