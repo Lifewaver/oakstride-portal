@@ -83,14 +83,15 @@
     }
   }
 
+  // 6-stegsflödet. form: steg 1 markeras klart automatiskt via kundens projektförfrågan.
+  // content: OakStride lägger upp material (steg 3–5) som kunden verifierar. link: steg 5 visar utkastlänk.
   var ONBOARDING_STEPS = [
-    { title: "Uppstartsmöte", desc: "Vi bokar ett möte och går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Mötet är genomfört" },
-    { title: "Skicka önskemål & referenser", desc: "Efter mötet mejlar du in alla dina önskemål samt förslag på andra sajter vi kan använda som förebild/bas.", cta: "Jag har skickat mina önskemål", mail: true },
-    { title: "Designriktning", desc: "Vi tar fram ett designförslag och enas om utseende, färger och struktur.", cta: "Jag godkänner designriktningen" },
-    { title: "Vi bygger din sida", desc: "Vi bygger första versionen utifrån det vi kommit överens om. Du behöver inte göra något här.", cta: "Okej, jag inväntar utkastet" },
-    { title: "Din granskning", desc: "Du granskar sidan och lämnar återkoppling i ett (1) korrekturvarv.", cta: "Jag har granskat och godkänner" },
-    { title: "Tillägg & villkor", desc: "Vi går igenom eventuella tillval (t.ex. e-post) nedan, och du godkänner villkoren.", cta: "Jag är klar med tillägg & villkor" },
-    { title: "Lansering & överlämning", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Grattis!", cta: "Bekräfta lansering" }
+    { title: "Projektförfrågan", desc: "Du fyller i vår projektförfrågan med din verksamhet, dina mål och exempel på sajter du gillar. Det är starten på resan.", form: true },
+    { title: "Uppstartsmöte", desc: "Vi bokar och håller ett uppstartsmöte där vi går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Uppstartsmötet är genomfört" },
+    { title: "Verifiering av uppstartsmötet", desc: "Vi sammanfattar mötet, baserat på transkribering och en skriftlig sammanfattning. Läs igenom och verifiera att vi fångat rätt. Vill du komplettera eller ändra något — mejla in det till oss.", content: true, mail: true, cta: "Jag verifierar sammanfattningen" },
+    { title: "Komplett kravbild", desc: "Här är den kompletta kravbilden för din nya sida — allt vi ska bygga, samlat på ett ställe. Godkänn den så sätter vi igång bygget.", content: true, cta: "Jag godkänner kravbilden" },
+    { title: "Verifiering av utkast", desc: "Vi har byggt ett utkast av din sida. Granska det och verifiera att det stämmer med kravbilden.", content: true, link: true, cta: "Jag har granskat och godkänner utkastet" },
+    { title: "Lansering", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Grattis — nu är ni live!", cta: "Bekräfta lansering" }
   ];
 
   function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
@@ -412,37 +413,83 @@
       sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
       sb.from("agreement_acceptances").select("id").eq("user_id", session.user.id)
         .eq("agreement_version", AGREEMENT.version).maybeSingle(),
-      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id)
+      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id),
+      sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
+      sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id)
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
       var accepted = !!(out[1] && out[1].data);
       var checkoffs = out[2].error ? [] : (out[2].data || []);
+      var briefs = out[3].error ? [] : (out[3].data || []);
+      var brief = briefs[0] || null;
+      var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
       var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
+
+      function isDone(n) { return n === 1 ? !!brief : !!done[n]; }
+      function doneDate(n) { return n === 1 ? (brief && brief.created_at) : done[n]; }
+      function contentReady(n) { var c = content[n]; return n === 5 ? !!(c && (c.link || c.body)) : !!(c && c.body); }
+
       var current = 0;
-      for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!done[k]) { current = k; break; } }
+      for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!isDone(k)) { current = k; break; } }
       var allDone = current === 0;
       var proposed = addons.filter(function (a) { return a.status === "proposed"; });
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
-      var html = "";
 
-      if (!allDone) {
-        html += '<div class="card onb-card"><h2>Så sätter vi upp din sida</h2>' +
-          '<p class="muted">Bocka av varje steg allt eftersom. Det aktiva steget visar vad som gäller just nu.</p>' +
-          '<ol class="onb-steps">' + ONBOARDING_STEPS.map(function (s, i) {
-            var n = i + 1, isDone = !!done[n], isCur = (n === current);
-            var cls = isDone ? "done" : (isCur ? "current" : "upcoming");
-            var body = "";
-            if (isCur) {
-              body = '<div class="onb-step-desc">' + esc(s.desc) + "</div>" +
-                (s.mail ? '<p class="onb-step-desc"><a href="mailto:info@oakstride.se?subject=Mina%20önskemål%20och%20referenssajter">Öppna ett mejl till info@oakstride.se &rarr;</a></p>' : "") +
-                '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
+      var html = '<div class="card onb-card"><h2>Din resa mot en ny sida</h2>' +
+        '<p class="muted">' + (allDone
+          ? "Alla steg är klara — grattis! Du kan öppna varje steg för att se vad ni kommit fram till."
+          : "Öppna varje steg för att se vad som gäller. Du kan alltid gå tillbaka och se vad du bockat av.") + "</p>" +
+        '<div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
+          var n = i + 1, dn = isDone(n), cur = (n === current);
+          var cls = dn ? "done" : (cur ? "current" : "upcoming");
+          var meta = dn ? '<span class="onb-acc-meta">✓ ' + fmtDate(doneDate(n)) + "</span>"
+            : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
+          var body = '<div class="onb-step-desc">' + esc(s.desc) + "</div>";
+
+          if (s.form) {
+            body += brief
+              ? '<div class="onb-content-block"><strong>Din projektförfrågan</strong>' +
+                '<div class="detail-desc">' + esc(brief.description) + "</div>" +
+                (brief.example_sites ? '<p style="margin:.5rem 0 .2rem"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(brief.example_sites) + "</div>" : "") + "</div>"
+              : '<p class="muted">Vi hittar ingen projektförfrågan på din e-post ännu. Fyllde du i formuläret på oakstride.se? Hör av dig till info@oakstride.se så hjälper vi dig.</p>';
+          }
+
+          if (s.content) {
+            var c = content[n];
+            if (contentReady(n)) {
+              if (c.body) body += '<div class="onb-content-block">' + esc(c.body).replace(/\n/g, "<br>") + "</div>";
+              if (s.link && c.link) {
+                var url = /^https?:\/\//.test(c.link) ? c.link : "https://" + c.link;
+                body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(url) + '" target="_blank" rel="noopener">Öppna utkastet &#8599;</a></p>';
+              }
+            } else {
+              body += '<p class="muted">Materialet läggs upp av OakStride så snart det är klart. Du får ett mejl när det är dags att verifiera.</p>';
             }
-            return '<li class="' + cls + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
-              '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) +
-              (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + "</span>" : "") + "</div>" + body + "</div></li>";
-          }).join("") + "</ol></div>";
-      }
+          }
+
+          if (s.mail && cur && contentReady(n)) {
+            body += '<p class="onb-step-desc"><a href="mailto:info@oakstride.se?subject=Kompletteringar%20till%20uppstartssammanfattningen">Mejla in kompletteringar eller ändringar &rarr;</a></p>';
+          }
+
+          if (dn) {
+            if (n !== 1) body += '<p class="onb-verified">✓ Verifierat ' + fmtDate(doneDate(n)) + "</p>";
+          } else if (cur && n !== 1) {
+            if (s.content && !contentReady(n)) {
+              body += '<p class="status-note">Blir tillgängligt när OakStride lagt upp materialet.</p>';
+            } else {
+              body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
+            }
+          } else if (!cur && n !== 1) {
+            body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
+          }
+
+          return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + ">" +
+            '<summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + "</span>" +
+            '<span class="onb-acc-title">' + esc(s.title) + "</span>" + meta +
+            '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary>' +
+            '<div class="onb-acc-body">' + body + "</div></details>";
+        }).join("") + "</div></div>";
 
       // Villkoren godkänns HÄR, inuti flödet — inte som en vägg innan man kommer in.
       if (accepted) {
@@ -871,18 +918,25 @@
 
   function renderAdminCustomerDetail(pid) {
     main.innerHTML = '<div class="spinner"></div>';
-    Promise.all([
-      sb.from("profiles").select("*").eq("id", pid).single(),
-      sb.from("addons").select("*").eq("user_id", pid).order("created_at"),
-      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", pid),
-      sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
-      sb.from("customer_services").select("*").eq("user_id", pid).order("kind")
-    ]).then(function (out) {
-      var p = out[0].data, addons = out[1].data || [];
-      if (out[0].error || !p) { toast("Kunde inte hämta kunden.", true); renderAdminCustomers(); return; }
-      var done = {}; (out[2].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
-      var doneCount = Object.keys(done).length;
-      var requests = out[3].data || [], services = out[4].data || [];
+    sb.from("profiles").select("*").eq("id", pid).single().then(function (pres) {
+      var p = pres.data;
+      if (pres.error || !p) { toast("Kunde inte hämta kunden.", true); renderAdminCustomers(); return; }
+      Promise.all([
+        sb.from("addons").select("*").eq("user_id", pid).order("created_at"),
+        sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", pid),
+        sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
+        sb.from("customer_services").select("*").eq("user_id", pid).order("kind"),
+        sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }),
+        sb.from("onboarding_content").select("step_no, body, link").eq("user_id", pid)
+      ]).then(function (out) {
+      var addons = out[0].data || [];
+      var done = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
+      var requests = out[2].data || [], services = out[3].data || [];
+      var briefs = out[4].error ? [] : (out[4].data || []);
+      var brief = briefs[0] || null;
+      var content = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { content[r.step_no] = r; });
+      var step1Done = !!brief;
+      var doneCount = (step1Done ? 1 : 0) + [2, 3, 4, 5, 6].filter(function (n) { return !!done[n]; }).length;
       var newCount = requests.filter(function (r) { return r.status === "new"; }).length;
       var site = (p.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
       var siteUrl = site ? "https://" + site : null;
@@ -902,7 +956,12 @@
                 '<div class="req-meta">#' + r.id + " · " + fmtDate(r.created_at) + "</div></button>";
             }).join("") + "</div>"
           : '<p class="muted">Inga ärenden ännu.</p>') + "</div>" +
-        '<div class="card"><h2>Önskemål (projektförfrågan)</h2><div id="cust-briefs"><div class="spinner"></div></div></div>' +
+        '<div class="card"><h2>Önskemål (projektförfrågan)</h2>' +
+        (brief
+          ? '<div class="detail-meta"><span>' + fmtDate(brief.created_at) + "</span></div>" +
+            '<div class="detail-desc">' + esc(brief.description) + "</div>" +
+            (brief.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(brief.example_sites) + "</div>" : "")
+          : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>') + "</div>" +
         '<div class="card"><h2>Tjänster — domän, e-post m.m.</h2>' +
         '<div id="svc-list">' + servicesList(services) + "</div>" +
         '<form id="form-svc" style="margin-top:1rem">' +
@@ -916,12 +975,25 @@
         '<button type="submit" class="btn btn-primary btn-inline">Lägg till tjänst</button></form></div>' +
         '<div class="card"><h2>Uppstartssteg — kundens framsteg (' + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
         '<ol class="onb-steps admin-steps">' + ONBOARDING_STEPS.map(function (s, i) {
-          var n = i + 1, isDone = !!done[n];
+          var n = i + 1, isDone = n === 1 ? step1Done : !!done[n];
+          var dateBit = n === 1
+            ? (step1Done ? ' <span class="onb-step-date">' + fmtDate(brief.created_at) + '</span> <span class="muted">(via projektförfrågan)</span>' : "")
+            : (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + '</span> <button class="linklike" data-undo="' + n + '">Ångra</button>' : "");
           return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
-            '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) +
-            (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + '</span> <button class="linklike" data-undo="' + n + '">Ångra</button>' : "") +
-            "</div></div></li>";
+            '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) + dateBit + "</div></div></li>";
         }).join("") + "</ol></div>" +
+        '<div class="card"><h2>Material till kunden (steg 3–5)</h2>' +
+        '<p class="muted">Detta visas för kunden i uppstartsflödet som underlag för verifiering. Steg 3: sammanfattning av mötet. Steg 4: kravbild. Steg 5: länk till utkast.</p>' +
+        '<form id="form-content">' +
+        '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet</label>' +
+        '<textarea id="c3" rows="6" placeholder="Transkribering / sammanfattning av vad ni kom överens om...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+        '<label for="c4">Steg 4 — komplett kravbild</label>' +
+        '<textarea id="c4" rows="6" placeholder="Allt som ska byggas, samlat på ett ställe...">' + esc(content[4] ? (content[4].body || "") : "") + "</textarea>" +
+        '<label for="c5link">Steg 5 — länk till utkast</label>' +
+        '<input type="text" id="c5link" placeholder="https://..." value="' + esc(content[5] ? (content[5].link || "") : "") + '">' +
+        '<label for="c5">Steg 5 — ev. kommentar till utkastet</label>' +
+        '<textarea id="c5" rows="3" placeholder="Valfritt: vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
+        '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
         '<div class="card"><h2>Föreslå tillägg</h2>' +
         '<p class="muted">Kunden får ett mejl och kan beställa eller avböja i portalen.</p>' +
         '<form id="form-addon">' +
@@ -972,15 +1044,20 @@
           });
         });
       });
-      sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }).then(function (bres) {
-        var cbx = document.getElementById("cust-briefs");
-        if (!cbx) return;
-        var bs = bres.error ? [] : (bres.data || []);
-        cbx.innerHTML = bs.length ? bs.map(function (b) {
-          return '<div class="detail-meta"><span>' + fmtDate(b.created_at) + "</span></div>" +
-            '<div class="detail-desc">' + esc(b.description) + "</div>" +
-            (b.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(b.example_sites) + "</div>" : "");
-        }).join("<hr>") : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>';
+      document.getElementById("form-content").addEventListener("submit", function (e) {
+        e.preventDefault();
+        function v(id) { return document.getElementById(id).value.trim() || null; }
+        var now = new Date().toISOString();
+        var rows = [
+          { user_id: pid, step_no: 3, body: v("c3"), link: null, updated_at: now },
+          { user_id: pid, step_no: 4, body: v("c4"), link: null, updated_at: now },
+          { user_id: pid, step_no: 5, body: v("c5"), link: v("c5link"), updated_at: now }
+        ];
+        sb.from("onboarding_content").upsert(rows, { onConflict: "user_id,step_no" }).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          toast("Material sparat.");
+          renderAdminCustomerDetail(pid);
+        });
       });
       document.getElementById("form-addon").addEventListener("submit", function (e) {
         e.preventDefault();
@@ -1004,6 +1081,7 @@
             if (r.error) toast("Kunde inte ta bort: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
+      });
       });
     });
   }

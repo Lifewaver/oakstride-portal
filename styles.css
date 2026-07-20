@@ -247,6 +247,26 @@ form .btn{margin-top:1rem}
 .onb-steps li.done .onb-dot{background:var(--moss);color:#fff;border-color:var(--moss)}
 .onb-steps li.current .onb-dot{background:var(--pine);color:#fff;border-color:var(--pine)}
 .onb-sum{margin-top:.75rem;font-weight:600;color:var(--pine)}
+/* Uppstartsflöde som dropdowns (accordion) */
+.onb-acc{display:flex;flex-direction:column;gap:.55rem;margin-top:.7rem}
+.onb-acc-item{border:1px solid var(--line);border-radius:9px;background:#fff;overflow:hidden}
+.onb-acc-item[open]{box-shadow:0 1px 4px rgba(20,40,30,.06)}
+.onb-acc-item.upcoming{opacity:.72}
+.onb-acc-sum{display:flex;align-items:center;gap:.7rem;padding:.85rem .9rem;cursor:pointer;list-style:none}
+.onb-acc-sum::-webkit-details-marker{display:none}
+.onb-acc-sum:hover{background:#fafbfa}
+.onb-acc-title{flex:1;min-width:0;font-weight:600;color:var(--pine)}
+.onb-acc-item.upcoming .onb-acc-title{font-weight:500;color:#5b635a}
+.onb-acc-meta{font-size:.78rem;color:#8a918a;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+.onb-acc-item.current .onb-acc-meta{color:var(--pine)}
+.onb-acc-chev{flex:none;color:#a2a9a2;font-size:.9rem;transition:transform .2s ease}
+.onb-acc-item[open] .onb-acc-chev{transform:rotate(180deg)}
+.onb-acc-body{padding:.2rem 1rem 1rem 3.2rem}
+.onb-acc-item.done .onb-dot{background:var(--moss);color:#fff;border-color:var(--moss)}
+.onb-acc-item.current .onb-dot{background:var(--pine);color:#fff;border-color:var(--pine)}
+.onb-content-block{margin:.2rem 0 .8rem;padding:.7rem .85rem;background:var(--birch);border-radius:7px;font-size:.93rem;color:#3f473f;line-height:1.5}
+.onb-content-block strong{display:block;margin-bottom:.3rem;color:var(--pine)}
+.onb-verified{margin:.3rem 0 0;font-weight:600;color:var(--moss);font-size:.9rem}
 .addon{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:.8rem 0;border-top:1px solid var(--line)}
 .addon:first-of-type{border-top:none}
 .addon-main{flex:1;min-width:200px}
