@@ -267,6 +267,11 @@ form .btn{margin-top:1rem}
 .onb-content-block{margin:.2rem 0 .8rem;padding:.7rem .85rem;background:var(--birch);border-radius:7px;font-size:.93rem;color:#3f473f;line-height:1.5}
 .onb-content-block strong{display:block;margin-bottom:.3rem;color:var(--pine)}
 .onb-verified{margin:.3rem 0 0;font-weight:600;color:var(--moss);font-size:.9rem}
+.onb-note{margin:.4rem 0 .9rem}
+.onb-note label{display:block;font-weight:600;color:var(--pine);font-size:.9rem;margin-bottom:.3rem}
+.onb-note textarea{width:100%;min-height:70px;font:inherit;padding:.55rem .65rem;border:1px solid var(--line);border-radius:7px;resize:vertical}
+.onb-note-row{display:flex;align-items:center;gap:.7rem;margin-top:.45rem;flex-wrap:wrap}
+.onb-note-saved{font-size:.78rem;font-family:'IBM Plex Mono',monospace}
 .addon{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:.8rem 0;border-top:1px solid var(--line)}
 .addon:first-of-type{border-top:none}
 .addon-main{flex:1;min-width:200px}

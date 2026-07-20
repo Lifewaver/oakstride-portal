@@ -88,7 +88,7 @@
   var ONBOARDING_STEPS = [
     { title: "Projektförfrågan", desc: "Du fyller i vår projektförfrågan med din verksamhet, dina mål och exempel på sajter du gillar. Det är starten på resan.", form: true },
     { title: "Uppstartsmöte", desc: "Vi bokar och håller ett uppstartsmöte där vi går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Uppstartsmötet är genomfört" },
-    { title: "Verifiering av uppstartsmötet", desc: "Vi sammanfattar mötet, baserat på transkribering och en skriftlig sammanfattning. Läs igenom och verifiera att vi fångat rätt. Vill du komplettera eller ändra något — mejla in det till oss.", content: true, mail: true, cta: "Jag verifierar sammanfattningen" },
+    { title: "Verifiering av uppstartsmötet", desc: "Vi sammanfattar mötet, baserat på transkribering och en skriftlig sammanfattning. Läs igenom och verifiera att vi fångat rätt. Vill du komplettera eller ändra något skriver du det direkt här nedan.", content: true, note: true, cta: "Jag verifierar sammanfattningen" },
     { title: "Komplett kravbild", desc: "Här är den kompletta kravbilden för din nya sida — allt vi ska bygga, samlat på ett ställe. Godkänn den så sätter vi igång bygget.", content: true, cta: "Jag godkänner kravbilden" },
     { title: "Verifiering av utkast", desc: "Vi har byggt ett utkast av din sida. Granska det och verifiera att det stämmer med kravbilden.", content: true, link: true, cta: "Jag har granskat och godkänner utkastet" },
     { title: "Lansering", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Grattis — nu är ni live!", cta: "Bekräfta lansering" }
@@ -415,7 +415,8 @@
         .eq("agreement_version", AGREEMENT.version).maybeSingle(),
       sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id),
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
-      sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id)
+      sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
+      sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id)
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -424,6 +425,7 @@
       var briefs = out[3].error ? [] : (out[3].data || []);
       var brief = briefs[0] || null;
       var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
+      var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
       var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
 
       function isDone(n) { return n === 1 ? !!brief : !!done[n]; }
@@ -468,8 +470,12 @@
             }
           }
 
-          if (s.mail && cur && contentReady(n)) {
-            body += '<p class="onb-step-desc"><a href="mailto:info@oakstride.se?subject=Kompletteringar%20till%20uppstartssammanfattningen">Mejla in kompletteringar eller ändringar &rarr;</a></p>';
+          if (s.note && contentReady(n)) {
+            var nt = notes[n] ? (notes[n].body || "") : "";
+            body += '<div class="onb-note"><label for="note' + n + '">Dina kompletteringar eller ändringar</label>' +
+              '<textarea id="note' + n + '" rows="4" placeholder="Skriv här om du vill komplettera eller ändra något i sammanfattningen...">' + esc(nt) + "</textarea>" +
+              '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-note="' + n + '">Spara kompletteringar</button>' +
+              (notes[n] && notes[n].updated_at ? '<span class="muted onb-note-saved">Sparat ' + fmtDate(notes[n].updated_at) + "</span>" : "") + "</div></div>";
           }
 
           if (dn) {
@@ -536,6 +542,12 @@
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
       });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-note]"), function (btn) {
+        btn.addEventListener("click", function () {
+          var n = Number(btn.getAttribute("data-note"));
+          saveOnbNote(n, document.getElementById("note" + n).value);
+        });
+      });
       Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
         btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
       });
@@ -549,6 +561,17 @@
     sb.from("onboarding_checkoffs").insert({ user_id: session.user.id, step_no: n }).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Steg godkänt!");
+      loadOnboarding();
+    });
+  }
+
+  function saveOnbNote(n, val) {
+    sb.from("onboarding_notes").upsert(
+      { user_id: session.user.id, step_no: n, body: (val || "").trim() || null, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,step_no" }
+    ).then(function (res) {
+      if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
+      toast("Dina kompletteringar är sparade.");
       loadOnboarding();
     });
   }
@@ -927,7 +950,8 @@
         sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
         sb.from("customer_services").select("*").eq("user_id", pid).order("kind"),
         sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }),
-        sb.from("onboarding_content").select("step_no, body, link").eq("user_id", pid)
+        sb.from("onboarding_content").select("step_no, body, link").eq("user_id", pid),
+        sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid)
       ]).then(function (out) {
       var addons = out[0].data || [];
       var done = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
@@ -935,6 +959,7 @@
       var briefs = out[4].error ? [] : (out[4].data || []);
       var brief = briefs[0] || null;
       var content = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { content[r.step_no] = r; });
+      var notes = {}; (out[6].error ? [] : (out[6].data || [])).forEach(function (r) { notes[r.step_no] = r; });
       var step1Done = !!brief;
       var doneCount = (step1Done ? 1 : 0) + [2, 3, 4, 5, 6].filter(function (n) { return !!done[n]; }).length;
       var newCount = requests.filter(function (r) { return r.status === "new"; }).length;
@@ -984,6 +1009,11 @@
         }).join("") + "</ol></div>" +
         '<div class="card"><h2>Material till kunden (steg 3–5)</h2>' +
         '<p class="muted">Detta visas för kunden i uppstartsflödet som underlag för verifiering. Steg 3: sammanfattning av mötet. Steg 4: kravbild. Steg 5: länk till utkast.</p>' +
+        (notes[3] && notes[3].body
+          ? '<div class="onb-content-block"><strong>Kundens kompletteringar (steg 3)' +
+            (notes[3].updated_at ? ' — ' + fmtDate(notes[3].updated_at) : "") + "</strong>" +
+            esc(notes[3].body).replace(/\n/g, "<br>") + "</div>"
+          : "") +
         '<form id="form-content">' +
         '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet</label>' +
         '<textarea id="c3" rows="6" placeholder="Transkribering / sammanfattning av vad ni kom överens om...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
