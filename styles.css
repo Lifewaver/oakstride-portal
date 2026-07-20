@@ -264,6 +264,10 @@ form .btn{margin-top:1rem}
 .onb-acc-body{padding:.2rem 1rem 1rem 3.2rem}
 .onb-acc-item.done .onb-dot{background:var(--moss);color:#fff;border-color:var(--moss)}
 .onb-acc-item.current .onb-dot{background:var(--pine);color:#fff;border-color:var(--pine)}
+.onb-loop-info{display:flex;align-items:center;gap:.5rem;margin:.1rem 0 .7rem;padding:.5rem .7rem;background:#eef4f0;border:1px solid #d5e4da;border-radius:8px;font-size:.88rem;color:var(--pine)}
+.onb-loop-note{display:flex;align-items:center;gap:.45rem;margin:.1rem 0 .55rem;font-size:.83rem;color:var(--moss);font-weight:600}
+.onb-loop-badge{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--moss);color:#fff;font-size:.8rem;line-height:1}
+.onb-loop-badge.sm{width:16px;height:16px;font-size:.68rem;vertical-align:middle}
 .onb-content-block{margin:.2rem 0 .8rem;padding:.7rem .85rem;background:var(--birch);border-radius:7px;font-size:.93rem;color:#3f473f;line-height:1.5}
 .onb-content-block strong{display:block;margin-bottom:.3rem;color:var(--pine)}
 .onb-verified{margin:.3rem 0 0;font-weight:600;color:var(--moss);font-size:.9rem}

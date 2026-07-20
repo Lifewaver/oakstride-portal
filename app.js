@@ -88,9 +88,9 @@
   var ONBOARDING_STEPS = [
     { title: "Projektförfrågan", desc: "Du fyller i vår projektförfrågan med din verksamhet, dina mål och exempel på sajter du gillar. Det är starten på resan.", form: true },
     { title: "Uppstartsmöte", desc: "Vi bokar och håller ett uppstartsmöte där vi går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Uppstartsmötet är genomfört" },
-    { title: "Verifiering av uppstartsmötet", desc: "Vi sammanfattar mötet, baserat på transkribering och en skriftlig sammanfattning. Läs igenom och verifiera att vi fångat rätt. Vill du komplettera eller ändra något skriver du det direkt här nedan.", content: true, note: true, cta: "Jag verifierar sammanfattningen" },
-    { title: "Komplett kravbild", desc: "Här är den kompletta kravbilden för din nya sida — allt vi ska bygga, samlat på ett ställe. Godkänn den så sätter vi igång bygget.", content: true, cta: "Jag godkänner kravbilden" },
-    { title: "Verifiering av utkast", desc: "Vi har byggt ett utkast av din sida. Granska det och verifiera att det stämmer med kravbilden.", content: true, link: true, cta: "Jag har granskat och godkänner utkastet" },
+    { title: "Verifiering av kravbild", desc: "Vi sammanställer era krav till en kravbild utifrån uppstartsmötet (transkribering + sammanfattning). Läs igenom och verifiera att allt stämmer. Vill du komplettera eller ändra något skriver du det direkt här nedan — vi uppdaterar kravbilden och du verifierar igen.", content: true, note: true, loop: true, cta: "Jag verifierar kravbilden" },
+    { title: "Komplett kravbild", desc: "När kravbilden är verifierad och komplett godkänner du den slutligt, så sätter vi igång bygget.", content: true, loop: true, cta: "Jag godkänner den kompletta kravbilden" },
+    { title: "Verifiering av utkast", desc: "Vi bygger ett utkast utifrån kravbilden. Granska det och verifiera att det stämmer. Behöver något justeras går vi tillbaka och uppdaterar — steg 3–5 kan upprepas tills du är helt nöjd.", content: true, link: true, loop: true, cta: "Jag har granskat och godkänner utkastet" },
     { title: "Lansering", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Grattis — nu är ni live!", cta: "Bekräfta lansering" }
   ];
 
@@ -515,12 +515,14 @@
         '<p class="muted">' + (allDone
           ? "Alla steg är klara — grattis! Du kan öppna varje steg för att se vad ni kommit fram till."
           : "Öppna varje steg för att se vad som gäller. Du kan alltid gå tillbaka och se vad du bockat av.") + "</p>" +
+        '<p class="onb-loop-info"><span class="onb-loop-badge">↻</span> Steg 3–5 (kravbild, godkännande och utkast) kan gå flera varv tills du är helt nöjd.</p>' +
         '<div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, dn = isDone(n), cur = (n === current);
           var cls = dn ? "done" : (cur ? "current" : "upcoming");
           var meta = dn ? '<span class="onb-acc-meta">✓ ' + fmtDate(doneDate(n)) + "</span>"
             : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
-          var body = '<div class="onb-step-desc">' + esc(s.desc) + "</div>";
+          var body = (s.loop ? '<p class="onb-loop-note"><span class="onb-loop-badge">↻</span> Iterativt steg — kan upprepas tills du är nöjd.</p>' : "") +
+            '<div class="onb-step-desc">' + esc(s.desc) + "</div>";
 
           if (s.form) {
             body += brief
@@ -565,7 +567,7 @@
 
           return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + ">" +
             '<summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + "</span>" +
-            '<span class="onb-acc-title">' + esc(s.title) + "</span>" + meta +
+            '<span class="onb-acc-title">' + esc(s.title) + (s.loop ? ' <span class="onb-loop-badge sm" title="Kan upprepas tills du är nöjd">↻</span>' : "") + "</span>" + meta +
             '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary>' +
             '<div class="onb-acc-body">' + body + "</div></details>";
         }).join("") + "</div></div>";
@@ -1111,8 +1113,8 @@
             esc(notes[3].body).replace(/\n/g, "<br>") + "</div>"
           : "") +
         '<form id="form-content">' +
-        '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet (visas för kunden)</label>' +
-        '<textarea id="c3" rows="6" placeholder="Sammanfattning av vad ni kom överens om...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+        '<label for="c3">Steg 3 — kravbild i text (visas för kunden)</label>' +
+        '<textarea id="c3" rows="6" placeholder="Sammanställ kraven från uppstartsmötet i löpande text...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
         '<label for="c3trans">Transkribering av uppstartsmötet (internt — visas ej för kunden)</label>' +
         '<textarea id="c3trans" rows="5" placeholder="Klistra in hela transkriberingen här som underlag...">' + esc(content[3] ? (content[3].transcript || "") : "") + "</textarea>" +
         '<label for="c4">Steg 4 — komplett kravbild</label>' +
