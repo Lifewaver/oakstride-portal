@@ -187,12 +187,54 @@
     return '<details class="spec-page"><summary class="spec-page-sum"><span class="spec-page-name">' + esc(p.text) + "</span> " + tierBadge(p.tier) +
       '<span class="spec-page-chev" aria-hidden="true">▾</span></summary><div class="spec-page-body">' + inner + "</div></details>";
   }
+  var HOURLY_RATE = 1095; // kr/tim, exkl. moms (enligt prismodellen)
+  function fmtHours(n) { return Number(n || 0).toLocaleString("sv-SE"); }
+  function periodSuffix(p) { return p === "manad" ? "/mån" : (p === "ar" ? "/år" : (p === "engang" ? " (engång)" : "")); }
+  function parsePeriod(s) {
+    s = String(s || "").trim().toLowerCase();
+    if (s.indexOf("mån") === 0 || s === "manad" || s === "mån") return "manad";
+    if (s.indexOf("år") === 0 || s === "ar" || s === "år") return "ar";
+    if (s.indexOf("eng") === 0) return "engang";
+    return "";
+  }
+  function extraHoursToText(arr) {
+    return (arr || []).map(function (i) { return i.label + " | " + fmtHours(i.hours); }).join("\n");
+  }
+  function textToExtraHours(text) {
+    return String(text || "").split("\n").filter(function (l) { return l.trim(); }).map(function (l) {
+      var p = l.split("|");
+      return { label: (p[0] || "").trim(), hours: parseFloat(String(p[1] || "").replace(",", ".").trim()) || 0 };
+    }).filter(function (i) { return i.label; });
+  }
+  function recurringToText(arr) {
+    return (arr || []).map(function (i) {
+      var per = i.period === "manad" ? "mån" : (i.period === "ar" ? "år" : (i.period === "engang" ? "engång" : ""));
+      return i.label + " | " + (i.amount == null ? "" : i.amount) + (per ? " | " + per : "");
+    }).join("\n");
+  }
+  function textToRecurring(text) {
+    return String(text || "").split("\n").filter(function (l) { return l.trim(); }).map(function (l) {
+      var p = l.split("|");
+      var amt = parseFloat(String(p[1] || "").replace(",", ".").replace(/\s/g, ""));
+      return { label: (p[0] || "").trim(), amount: isNaN(amt) ? null : amt, period: parsePeriod(p[2]) };
+    }).filter(function (i) { return i.label; });
+  }
+  function domainText(dom) {
+    if (!dom) return "";
+    if (dom.status === "egen") return "Egen domän" + (dom.name ? " (" + dom.name + ")" : "");
+    if (dom.status === "behover") return "Behöver hjälp att införskaffa" + (dom.name ? " (önskad: " + dom.name + ")" : "");
+    return dom.name || "";
+  }
   // Läsvy av kravspecen (kund + admin). orderedAddons visas som beställda tillägg.
   function renderSpecView(data, orderedAddons, versionLabel) {
     var sections = (data && data.sections) || {};
     var html = '<div class="spec">';
     if (versionLabel) html += '<div class="spec-ver">' + versionLabel + "</div>";
     html += '<p class="spec-legend">' + tierBadge("standard") + " ingår i standardsidan · " + tierBadge("extra") + " är tillval utöver standard.</p>";
+    var dom = data && data.domain;
+    if (dom && (dom.status || dom.name)) {
+      html += '<div class="spec-sec"><h4>Domän</h4><ul class="spec-list"><li><span>' + esc(domainText(dom)) + "</span></li></ul></div>";
+    }
     SPEC_SECTIONS.forEach(function (sec) {
       var items = sections[sec.key] || [];
       html += '<div class="spec-sec"><h4>' + esc(sec.title) + "</h4>";
@@ -216,6 +258,25 @@
             return "<li><span>" + esc(a.title) + " · " + esc(addonPrice(a)) + "</span> " + tierBadge("extra") + "</li>";
           }).join("") + "</ul>"
         : '<p class="muted spec-empty">Inga beställda tillägg ännu.</p>') + "</div>";
+    var eh = (data && data.extra_hours) || [];
+    if (eh.length) {
+      var totalH = eh.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
+      html += '<div class="spec-sec"><h4>Extra arbete (utöver standardsidan)</h4>' +
+        '<ul class="spec-list">' + eh.map(function (i) {
+          return '<li><span>' + esc(i.label) + '</span> <span class="spec-hours">' + fmtHours(i.hours) + " tim</span></li>";
+        }).join("") + "</ul>" +
+        '<p class="spec-total">Uppskattat: ' + fmtHours(totalH) + " tim ≈ " + fmtKr(Math.round(totalH * HOURLY_RATE)) +
+        ' kr <span class="muted">(exkl. moms — debiteras per nedlagd timme à ' + fmtKr(HOURLY_RATE) + " kr)</span></p></div>";
+    }
+    var rc = (data && data.recurring_costs) || [];
+    if (rc.length) {
+      html += '<div class="spec-sec"><h4>Löpande kostnader (självkostnad)</h4>' +
+        '<ul class="spec-list">' + rc.map(function (i) {
+          return '<li><span>' + esc(i.label) + '</span> <span class="spec-cost">' +
+            (i.amount == null || i.amount === "" ? "" : fmtKr(i.amount) + " kr" + periodSuffix(i.period)) + "</span></li>";
+        }).join("") + "</ul>" +
+        '<p class="muted spec-note">Tredjepartskostnader vidarefaktureras till självkostnad.</p></div>';
+    }
     return html + "</div>";
   }
 
@@ -539,7 +600,8 @@
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
       sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
       sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id),
-      sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false })
+      sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false }),
+      sb.from("extra_work_approvals").select("spec_version").eq("user_id", session.user.id)
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -553,6 +615,8 @@
       var spec = specs[0] || null;
       // Kunden har gjort en ändring/förtydligande om det finns en kund-genererad version.
       var hasCustomerChange = specs.some(function (v) { return v.source === "kund"; });
+      var approvals = out[7].error ? [] : (out[7].data || []);
+      var extraApproved = !!(spec && approvals.some(function (a) { return a.spec_version === spec.version; }));
       var done = {}, doneExtras = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
       function extrasLabel(n) { return n === 3 && done[3] ? (doneExtras[3] ? " (med tillägg)" : " (utan tillägg)") : ""; }
 
@@ -657,6 +721,19 @@
           spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu") +
         "</div>";
 
+      // Godkännande av extra arbete (extra timmar utöver standardsidan).
+      var extraHours = spec && spec.data && spec.data.extra_hours ? spec.data.extra_hours : [];
+      if (extraHours.length) {
+        var th = extraHours.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
+        html += '<div class="card onb-card"><h2>Godkänn extra arbete</h2>' +
+          '<p class="muted">Utöver standardsidan tillkommer extra arbete (se ”Extra arbete” i kravspecifikationen ovan) — uppskattat ' +
+          fmtHours(th) + " tim ≈ " + fmtKr(Math.round(th * HOURLY_RATE)) + ' kr, exkl. moms. Det debiteras per nedlagd timme à ' + fmtKr(HOURLY_RATE) + " kr. Godkänn att vi får utföra och fakturera det.</p>" +
+          (extraApproved
+            ? '<p class="onb-verified">✓ Du har godkänt det extra arbetet (version ' + spec.version + ").</p>"
+            : '<label class="onb-confirm"><input type="checkbox" data-approve-extra="' + spec.version + '"> <span>Jag godkänner det extra arbetet och att det faktureras per timme</span></label>') +
+          "</div>";
+      }
+
       // Villkoren godkänns HÄR, inuti flödet — inte som en vägg innan man kommer in.
       if (accepted) {
         html += '<div class="card onb-card onb-terms-ok"><span class="chip chip-approved">✓ Villkor godkända</span> ' +
@@ -699,6 +776,10 @@
       Array.prototype.forEach.call(box.querySelectorAll("[data-verify3]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(3, cb.getAttribute("data-verify3") === "1"); });
       });
+      var approveBtn = box.querySelector("[data-approve-extra]");
+      if (approveBtn) approveBtn.addEventListener("change", function () {
+        if (approveBtn.checked) saveExtraApproval(Number(approveBtn.getAttribute("data-approve-extra")));
+      });
       var clarBtn = box.querySelector("[data-clar]");
       if (clarBtn) clarBtn.addEventListener("click", function () {
         var text = document.getElementById("clar-text").value;
@@ -720,6 +801,14 @@
     sb.from("onboarding_checkoffs").insert(row).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast(n === 3 ? ("Kravbilden verifierad " + (withExtras ? "med tillägg." : "utan tillägg.")) : "Steg godkänt!");
+      loadOnboarding();
+    });
+  }
+
+  function saveExtraApproval(version) {
+    sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: version }).then(function (res) {
+      if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
+      toast("Tack! Det extra arbetet är godkänt.");
       loadOnboarding();
     });
   }
@@ -1110,7 +1199,8 @@
         sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }),
         sb.from("onboarding_content").select("step_no, body, link, transcript").eq("user_id", pid),
         sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid),
-        sb.from("requirement_specs").select("*").eq("user_id", pid).order("version", { ascending: false })
+        sb.from("requirement_specs").select("*").eq("user_id", pid).order("version", { ascending: false }),
+        sb.from("extra_work_approvals").select("spec_version, approved_at").eq("user_id", pid)
       ]).then(function (out) {
       var addons = out[0].data || [];
       var done = {}, doneExtras = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
@@ -1122,6 +1212,9 @@
       var specs = out[7].error ? [] : (out[7].data || []);
       var latestSpec = specs[0] || null;
       var specData = latestSpec ? latestSpec.data : specFromBrief(brief);
+      var extraApprovals = out[8].error ? [] : (out[8].data || []);
+      var latestExtraApproved = !!(latestSpec && extraApprovals.some(function (a) { return a.spec_version === latestSpec.version; }));
+      var dm = specData.domain || {};
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
       var step1Done = !!brief;
       var doneCount = (step1Done ? 1 : 0) + [2, 3, 4, 5, 6].filter(function (n) { return !!done[n]; }).length;
@@ -1194,9 +1287,22 @@
             (isSidor ? ' <span class="muted spec-hint">— en sida per rad; rader som börjar med <strong>-</strong> blir detaljer under sidan (prefixa <strong>tech:</strong> eller <strong>change:</strong>, annars specifikation; <strong>*</strong> = extra)</span>' : "") + "</label>" +
             '<textarea id="spec-' + sec.key + '" rows="' + (isSidor ? 8 : 3) + '">' + esc(val) + "</textarea>";
         }).join("") +
+        '<label for="spec-domain">Domän</label>' +
+        '<div class="addon-form-row"><div><select id="spec-domain"><option value="">—</option>' +
+        '<option value="egen"' + (dm.status === "egen" ? " selected" : "") + ">Egen domän</option>" +
+        '<option value="behover"' + (dm.status === "behover" ? " selected" : "") + ">Behöver hjälp att införskaffa</option></select></div>" +
+        '<div style="flex:2"><input type="text" id="spec-domain-name" placeholder="domännamn (t.ex. exempel.se)" value="' + esc(dm.name || "") + '"></div></div>' +
+        '<label for="spec-extra">Extra arbete (utöver standard) — en rad per post: <em>beskrivning | timmar</em></label>' +
+        '<textarea id="spec-extra" rows="4" placeholder="Uppsättning av e-post | 1,5&#10;Konfiguration av M365 | 2">' + esc(extraHoursToText(specData.extra_hours)) + "</textarea>" +
+        '<label for="spec-recurring">Löpande kostnader, självkostnad — <em>beskrivning | belopp | mån/år/engång</em></label>' +
+        '<textarea id="spec-recurring" rows="3" placeholder="Domännamn exempel.se | 200 | år&#10;M365 Business Basic | 70 | mån">' + esc(recurringToText(specData.recurring_costs)) + "</textarea>" +
         '<label for="spec-note">Ändringsnotering (vad ändras i denna version)</label>' +
         '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
         '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></form>' +
+        (latestSpec && (specData.extra_hours || []).length
+          ? '<p class="' + (latestExtraApproved ? "onb-verified" : "status-note") + '">' +
+            (latestExtraApproved ? "✓ Kunden har godkänt det extra arbetet (v" + latestSpec.version + ")." : "Kunden har ännu inte godkänt det extra arbetet (v" + latestSpec.version + ").") + "</p>"
+          : "") +
         (specs.length
           ? '<h3 class="spec-hist-h">Versioner</h3><ul class="spec-history">' + specs.map(function (v) {
               var src = v.source === "kund" ? "kundens ändring" : (v.source === "baslinje" ? "baslinje" : "admin");
@@ -1277,11 +1383,19 @@
             ? textToSidor(document.getElementById("spec-sidor").value)
             : textToSpecItems(document.getElementById("spec-" + sec.key).value);
         });
+        var domStatus = document.getElementById("spec-domain").value;
+        var domName = document.getElementById("spec-domain-name").value.trim();
+        var data = {
+          sections: sections,
+          domain: (domStatus || domName) ? { status: domStatus || null, name: domName || null } : null,
+          extra_hours: textToExtraHours(document.getElementById("spec-extra").value),
+          recurring_costs: textToRecurring(document.getElementById("spec-recurring").value)
+        };
         var nextVer = (latestSpec ? latestSpec.version : 0) + 1;
         sb.from("requirement_specs").insert({
           user_id: pid,
           version: nextVer,
-          data: { sections: sections },
+          data: data,
           change_note: document.getElementById("spec-note").value.trim() || null,
           source: latestSpec ? "admin" : "baslinje"
         }).then(function (r) {
