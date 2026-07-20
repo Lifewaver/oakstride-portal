@@ -746,6 +746,7 @@
 
   function renderAdmin() {
     if (adminTab === "kunder") return renderAdminCustomers();
+    if (adminTab === "briefs") return renderAdminBriefs();
     main.innerHTML =
       '<div class="page-head"><h1>Alla ärenden</h1>' +
       '<div class="filter-row"><select id="status-filter">' +
@@ -755,6 +756,41 @@
       '<div id="req-list" class="req-list"><div class="spinner"></div></div>';
     document.getElementById("status-filter").addEventListener("change", function () { loadRequests(true); });
     loadRequests(true);
+  }
+
+  var BRIEF_STATUS = { new: "Ny", contacted: "Kontaktad", converted: "Kund", archived: "Arkiverad" };
+
+  function renderAdminBriefs() {
+    main.innerHTML = "<h1>Projektförfrågningar</h1>" +
+      '<p class="muted">Inkomna briefer från oakstride.se/studio. Varje förfrågan är även en ansökan om portalåtkomst.</p>' +
+      '<div id="briefs-box"><div class="spinner"></div></div>';
+    sb.from("project_briefs").select("*").order("created_at", { ascending: false }).then(function (res) {
+      var box = document.getElementById("briefs-box");
+      if (!box) return;
+      if (res.error) { box.innerHTML = '<div class="empty">' + esc(res.error.message) + "</div>"; return; }
+      var rows = res.data || [];
+      if (!rows.length) { box.innerHTML = '<div class="empty">Inga förfrågningar ännu.</div>'; return; }
+      box.innerHTML = rows.map(function (b) {
+        return '<div class="card" style="margin-bottom:1rem"><div class="page-head">' +
+          '<h2 style="margin:0">' + esc(b.name) + (b.company ? " · " + esc(b.company) : "") + "</h2>" +
+          '<select data-bstatus="' + b.id + '">' + Object.keys(BRIEF_STATUS).map(function (s) {
+            return '<option value="' + s + '"' + (b.status === s ? " selected" : "") + ">" + BRIEF_STATUS[s] + "</option>";
+          }).join("") + "</select></div>" +
+          '<div class="detail-meta"><span>' + fmtDate(b.created_at) + "</span>" +
+          '<span><strong>E-post:</strong> <a href="mailto:' + esc(b.email) + '">' + esc(b.email) + "</a></span>" +
+          (b.wants_portal ? '<span class="chip chip-new">Portalansökan</span>' : "") + "</div>" +
+          '<div class="detail-desc">' + esc(b.description) + "</div>" +
+          (b.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(b.example_sites) + "</div>" : "") +
+          "</div>";
+      }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll("[data-bstatus]"), function (sel) {
+        sel.addEventListener("change", function () {
+          sb.from("project_briefs").update({ status: sel.value }).eq("id", Number(sel.getAttribute("data-bstatus"))).then(function (r) {
+            if (r.error) toast("Kunde inte spara: " + r.error.message, true); else toast("Status uppdaterad.");
+          });
+        });
+      });
+    });
   }
 
   function renderAdminCustomers() {
@@ -850,7 +886,8 @@
         '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div>' +
         "</div>" +
         '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form></div>' +
-        '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>";
+        '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>" +
+        '<div class="card"><h2>Projektförfrågan från denna kund</h2><div id="cust-briefs"><div class="spinner"></div></div></div>';
 
       document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
       Array.prototype.forEach.call(document.querySelectorAll("[data-undo]"), function (btn) {
@@ -859,6 +896,16 @@
             if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
+      });
+      sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }).then(function (bres) {
+        var cbx = document.getElementById("cust-briefs");
+        if (!cbx) return;
+        var bs = bres.error ? [] : (bres.data || []);
+        cbx.innerHTML = bs.length ? bs.map(function (b) {
+          return '<div class="detail-meta"><span>' + fmtDate(b.created_at) + "</span></div>" +
+            '<div class="detail-desc">' + esc(b.description) + "</div>" +
+            (b.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(b.example_sites) + "</div>" : "");
+        }).join("<hr>") : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>';
       });
       document.getElementById("form-addon").addEventListener("submit", function (e) {
         e.preventDefault();
