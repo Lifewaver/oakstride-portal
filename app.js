@@ -225,58 +225,68 @@
     if (dom.status === "behover") return "Behöver hjälp att införskaffa" + (dom.name ? " (önskad: " + dom.name + ")" : "");
     return dom.name || "";
   }
-  // Läsvy av kravspecen (kund + admin). orderedAddons visas som beställda tillägg.
+  // Kravspecen indelad i avsnitt.
+  var SPEC_AVSNITT = [
+    { n: 1, title: "Syfte & mål", keys: ["mal", "malgrupp"] },
+    { n: 2, title: "Sidan & innehåll", keys: ["design", "sidor", "funktioner", "innehall", "fortydliganden", "ovrigt"], cost: "build" },
+    { n: 3, title: "Drift", keys: ["drift"], domain: true, cost: "drift" }
+  ];
+  var STANDARD_SITE_PRICE = 3000, DRIFT_MONTH = 150;
+  function specSecTitle(key) { for (var i = 0; i < SPEC_SECTIONS.length; i++) { if (SPEC_SECTIONS[i].key === key) return SPEC_SECTIONS[i].title; } return key; }
+  function specSitePrice(d) { return d && d.pricing && d.pricing.site != null && d.pricing.site !== "" ? Number(d.pricing.site) : STANDARD_SITE_PRICE; }
+  function specDriftPrice(d) { return d && d.pricing && d.pricing.drift != null && d.pricing.drift !== "" ? Number(d.pricing.drift) : DRIFT_MONTH; }
+  function specSecInner(key, sections) {
+    var items = sections[key] || [];
+    if (key === "sidor") return items.length ? '<div class="spec-pages">' + items.map(renderSpecPage).join("") + "</div>" : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+    return items.length ? '<ul class="spec-list">' + items.map(function (i) { return "<li><span>" + esc(i.text) + "</span> " + tierBadge(i.tier) + "</li>"; }).join("") + "</ul>" : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+  }
+  // Läsvy av kravspecen, indelad i avsnitt (kund + admin-förhandsvisning).
   function renderSpecView(data, orderedAddons, versionLabel) {
     var sections = (data && data.sections) || {};
+    var addons = orderedAddons || [];
     var html = '<div class="spec">';
     if (versionLabel) html += '<div class="spec-ver">' + versionLabel + "</div>";
     html += '<p class="spec-legend">' + tierBadge("standard") + " ingår i standardsidan · " + tierBadge("extra") + " är tillval utöver standard.</p>";
-    var dom = data && data.domain;
-    if (dom && (dom.status || dom.name)) {
-      html += '<div class="spec-sec"><h4>Domän</h4><ul class="spec-list"><li><span>' + esc(domainText(dom)) + "</span></li></ul></div>";
-    }
-    SPEC_SECTIONS.forEach(function (sec) {
-      var items = sections[sec.key] || [];
-      html += '<div class="spec-sec"><h4>' + esc(sec.title) + "</h4>";
-      if (sec.key === "sidor") {
-        html += items.length
-          ? '<div class="spec-pages">' + items.map(renderSpecPage).join("") + "</div>"
-          : '<p class="muted spec-empty">Fylls i efter hand.</p>';
-      } else {
-        html += items.length
-          ? '<ul class="spec-list">' + items.map(function (i) {
-              return "<li><span>" + esc(i.text) + "</span> " + tierBadge(i.tier) + "</li>";
-            }).join("") + "</ul>"
-          : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+    SPEC_AVSNITT.forEach(function (av) {
+      html += '<section class="spec-avsnitt"><h3 class="spec-avsnitt-h"><span class="spec-avsnitt-n">' + av.n + "</span>" + esc(av.title) + "</h3>";
+      if (av.domain) {
+        var dom = data && data.domain;
+        html += '<div class="spec-sec"><h4>Domän</h4>' +
+          ((dom && (dom.status || dom.name)) ? '<ul class="spec-list"><li><span>' + esc(domainText(dom)) + "</span></li></ul>" : '<p class="muted spec-empty">Fylls i efter hand.</p>') + "</div>";
       }
-      html += "</div>";
+      av.keys.forEach(function (key) {
+        html += '<div class="spec-sec"><h4>' + esc(specSecTitle(key)) + "</h4>" + specSecInner(key, sections) + "</div>";
+      });
+      if (av.cost === "build") {
+        var sitePrice = specSitePrice(data);
+        var eh = (data && data.extra_hours) || [];
+        var totalH = eh.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
+        var engAddons = addons.filter(function (a) { return a.billing !== "manad"; });
+        var engSum = engAddons.reduce(function (s, a) { return s + Number(a.price || 0); }, 0);
+        var totalEng = sitePrice + Math.round(totalH * HOURLY_RATE) + engSum;
+        html += '<div class="spec-cost-box"><h4>Kostnad — engång (exkl. moms)</h4><ul class="spec-cost-list">' +
+          "<li><span>Standardsida</span><span>" + fmtKr(sitePrice) + " kr</span></li>" +
+          eh.map(function (i) { return "<li><span>" + esc(i.label) + " (" + fmtHours(i.hours) + " tim)</span><span>" + fmtKr(Math.round((Number(i.hours) || 0) * HOURLY_RATE)) + " kr</span></li>"; }).join("") +
+          engAddons.map(function (a) { return "<li><span>" + esc(a.title) + "</span><span>" + fmtKr(a.price) + " kr</span></li>"; }).join("") +
+          '<li class="spec-cost-sum"><span>Summa engång</span><span>' + fmtKr(totalEng) + " kr</span></li></ul>" +
+          (eh.length ? '<p class="muted spec-note">Extra arbete debiteras per nedlagd timme à ' + fmtKr(HOURLY_RATE) + " kr; beloppet ovan är en uppskattning.</p>" : "") + "</div>";
+      } else if (av.cost === "drift") {
+        var driftPrice = specDriftPrice(data);
+        var manAddons = addons.filter(function (a) { return a.billing === "manad"; });
+        var manSum = manAddons.reduce(function (s, a) { return s + Number(a.price || 0); }, 0);
+        var rc = (data && data.recurring_costs) || [];
+        html += '<div class="spec-cost-box"><h4>Löpande kostnad</h4><ul class="spec-cost-list">' +
+          "<li><span>Drift &amp; hosting</span><span>" + fmtKr(driftPrice) + " kr/mån</span></li>" +
+          manAddons.map(function (a) { return "<li><span>" + esc(a.title) + "</span><span>" + fmtKr(a.price) + " kr/mån</span></li>"; }).join("") +
+          '<li class="spec-cost-sum"><span>OakStride löpande</span><span>' + fmtKr(driftPrice + manSum) + " kr/mån</span></li></ul>" +
+          (rc.length
+            ? '<h4 class="spec-cost-sub">Tredjepart (självkostnad)</h4><ul class="spec-cost-list">' +
+              rc.map(function (i) { return "<li><span>" + esc(i.label) + "</span><span>" + (i.amount == null || i.amount === "" ? "" : fmtKr(i.amount) + " kr" + periodSuffix(i.period)) + "</span></li>"; }).join("") +
+              '</ul><p class="muted spec-note">Vidarefaktureras till självkostnad.</p>'
+            : "") + "</div>";
+      }
+      html += "</section>";
     });
-    var extras = orderedAddons || [];
-    html += '<div class="spec-sec"><h4>Tillägg (beställda)</h4>' +
-      (extras.length
-        ? '<ul class="spec-list">' + extras.map(function (a) {
-            return "<li><span>" + esc(a.title) + " · " + esc(addonPrice(a)) + "</span> " + tierBadge("extra") + "</li>";
-          }).join("") + "</ul>"
-        : '<p class="muted spec-empty">Inga beställda tillägg ännu.</p>') + "</div>";
-    var eh = (data && data.extra_hours) || [];
-    if (eh.length) {
-      var totalH = eh.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
-      html += '<div class="spec-sec"><h4>Extra arbete (utöver standardsidan)</h4>' +
-        '<ul class="spec-list">' + eh.map(function (i) {
-          return '<li><span>' + esc(i.label) + '</span> <span class="spec-hours">' + fmtHours(i.hours) + " tim</span></li>";
-        }).join("") + "</ul>" +
-        '<p class="spec-total">Uppskattat: ' + fmtHours(totalH) + " tim ≈ " + fmtKr(Math.round(totalH * HOURLY_RATE)) +
-        ' kr <span class="muted">(exkl. moms — debiteras per nedlagd timme à ' + fmtKr(HOURLY_RATE) + " kr)</span></p></div>";
-    }
-    var rc = (data && data.recurring_costs) || [];
-    if (rc.length) {
-      html += '<div class="spec-sec"><h4>Löpande kostnader (självkostnad)</h4>' +
-        '<ul class="spec-list">' + rc.map(function (i) {
-          return '<li><span>' + esc(i.label) + '</span> <span class="spec-cost">' +
-            (i.amount == null || i.amount === "" ? "" : fmtKr(i.amount) + " kr" + periodSuffix(i.period)) + "</span></li>";
-        }).join("") + "</ul>" +
-        '<p class="muted spec-note">Tredjepartskostnader vidarefaktureras till självkostnad.</p></div>';
-    }
     return html + "</div>";
   }
 
@@ -321,28 +331,39 @@
     var sections = d.sections || {};
     var dom = d.domain || {};
     var html = '<div class="spec-ed">';
-    SPEC_SECTIONS.forEach(function (sec) {
-      html += '<div class="se-sec" data-key="' + sec.key + '"><h4>' + esc(sec.title) + "</h4>";
-      if (sec.key === "sidor") {
-        html += '<div class="se-pages">' + (sections.sidor || []).map(sePage).join("") + "</div>" +
-          '<button type="button" class="se-add-page btn btn-ghost btn-sm">+ Lägg till sida</button>';
-      } else {
-        html += '<div class="se-rows">' + (sections[sec.key] || []).map(function (i) { return seItemRow(i.text, i.tier); }).join("") + "</div>" +
-          '<button type="button" class="se-add-item btn btn-ghost btn-sm">+ Lägg till rad</button>';
+    SPEC_AVSNITT.forEach(function (av) {
+      html += '<div class="se-avsnitt"><div class="se-avsnitt-h"><span class="spec-avsnitt-n">' + av.n + "</span>" + esc(av.title) + "</div>";
+      if (av.domain) {
+        html += '<div class="se-sec"><h4>Domän</h4><div class="addon-form-row">' +
+          '<div><select id="spec-domain"><option value="">—</option>' +
+          '<option value="egen"' + (dom.status === "egen" ? " selected" : "") + ">Egen domän</option>" +
+          '<option value="behover"' + (dom.status === "behover" ? " selected" : "") + ">Behöver hjälp att införskaffa</option></select></div>" +
+          '<div style="flex:2"><input type="text" id="spec-domain-name" placeholder="domännamn (t.ex. exempel.se)" value="' + esc(dom.name || "") + '"></div></div></div>';
+      }
+      av.keys.forEach(function (key) {
+        html += '<div class="se-sec" data-key="' + key + '"><h4>' + esc(specSecTitle(key)) + "</h4>";
+        if (key === "sidor") {
+          html += '<div class="se-pages">' + (sections.sidor || []).map(sePage).join("") + "</div>" +
+            '<button type="button" class="se-add-page btn btn-ghost btn-sm">+ Lägg till sida</button>';
+        } else {
+          html += '<div class="se-rows">' + (sections[key] || []).map(function (i) { return seItemRow(i.text, i.tier); }).join("") + "</div>" +
+            '<button type="button" class="se-add-item btn btn-ghost btn-sm">+ Lägg till rad</button>';
+        }
+        html += "</div>";
+      });
+      if (av.cost === "build") {
+        html += '<div class="se-sec"><h4>Grundpris standardsida (kr, engång)</h4><input type="text" id="spec-site-price" class="se-price" value="' + esc(specSitePrice(d)) + '"></div>' +
+          '<div class="se-sec" data-block="extra"><h4>Extra arbete (' + fmtKr(HOURLY_RATE) + ' kr/tim)</h4>' +
+          '<div class="se-rows se-rows-extra">' + (d.extra_hours || []).map(seExtraRow).join("") + "</div>" +
+          '<button type="button" class="se-add-extra btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
+      } else if (av.cost === "drift") {
+        html += '<div class="se-sec"><h4>Driftavgift (kr/mån)</h4><input type="text" id="spec-drift-price" class="se-price" value="' + esc(specDriftPrice(d)) + '"></div>' +
+          '<div class="se-sec" data-block="recurring"><h4>Löpande kostnader (självkostnad)</h4>' +
+          '<div class="se-rows se-rows-rec">' + (d.recurring_costs || []).map(seRecRow).join("") + "</div>" +
+          '<button type="button" class="se-add-recurring btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
       }
       html += "</div>";
     });
-    html += '<div class="se-sec"><h4>Domän</h4><div class="addon-form-row">' +
-      '<div><select id="spec-domain"><option value="">—</option>' +
-      '<option value="egen"' + (dom.status === "egen" ? " selected" : "") + ">Egen domän</option>" +
-      '<option value="behover"' + (dom.status === "behover" ? " selected" : "") + ">Behöver hjälp att införskaffa</option></select></div>" +
-      '<div style="flex:2"><input type="text" id="spec-domain-name" placeholder="domännamn (t.ex. exempel.se)" value="' + esc(dom.name || "") + '"></div></div></div>';
-    html += '<div class="se-sec" data-block="extra"><h4>Extra arbete (utöver standard · ' + fmtKr(HOURLY_RATE) + ' kr/tim)</h4>' +
-      '<div class="se-rows se-rows-extra">' + (d.extra_hours || []).map(seExtraRow).join("") + "</div>" +
-      '<button type="button" class="se-add-extra btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
-    html += '<div class="se-sec" data-block="recurring"><h4>Löpande kostnader (självkostnad)</h4>' +
-      '<div class="se-rows se-rows-rec">' + (d.recurring_costs || []).map(seRecRow).join("") + "</div>" +
-      '<button type="button" class="se-add-recurring btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
     return html + "</div>";
   }
   function readSpecEditor(root) {
@@ -365,6 +386,8 @@
     });
     var domStatus = root.querySelector("#spec-domain").value;
     var domName = root.querySelector("#spec-domain-name").value.trim();
+    function priceOf(id) { var el = root.querySelector(id); if (!el || el.value.trim() === "") return null; var v = parseFloat(el.value.replace(",", ".").replace(/\s/g, "")); return isNaN(v) ? null : v; }
+    var pricing = { site: priceOf("#spec-site-price"), drift: priceOf("#spec-drift-price") };
     var extra = Array.prototype.map.call(root.querySelectorAll('[data-block="extra"] .se-row'), function (r) {
       return { label: r.querySelector(".se-eh-label").value.trim(), hours: parseFloat(String(r.querySelector(".se-eh-hours").value).replace(",", ".")) || 0 };
     }).filter(function (x) { return x.label; });
@@ -376,7 +399,8 @@
       sections: sections,
       domain: (domStatus || domName) ? { status: domStatus || null, name: domName || null } : null,
       extra_hours: extra,
-      recurring_costs: recurring
+      recurring_costs: recurring,
+      pricing: pricing
     };
   }
   function wireSpecEditor(root) {
