@@ -233,6 +233,13 @@ form .btn{margin-top:1rem}
 .onb-steps li{display:flex;align-items:flex-start;gap:.7rem;font-size:.95rem;color:#5b635a}
 .onb-steps li.current{color:var(--pine);font-weight:600}
 .onb-steps li.done{color:var(--moss)}
+.onb-steps li.upcoming{opacity:.5}
+.onb-step-main{flex:1;min-width:0}
+.onb-step-title{font-weight:600;color:var(--pine)}
+.onb-steps li.upcoming .onb-step-title{font-weight:500;color:#5b635a}
+.onb-step-desc{font-weight:400;color:#5b635a;font-size:.92rem;margin:.35rem 0 .7rem}
+.onb-step-date{font-weight:400;color:#8a918a;font-size:.78rem;font-family:'IBM Plex Mono',monospace;margin-left:.4rem}
+.admin-steps li{font-size:.92rem}
 .onb-dot{flex:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:.8rem;font-weight:600;background:var(--birch);color:#8a918a;border:1px solid var(--line)}
 .onb-steps li.done .onb-dot{background:var(--moss);color:#fff;border-color:var(--moss)}

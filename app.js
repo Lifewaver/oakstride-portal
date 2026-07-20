@@ -84,13 +84,13 @@
   }
 
   var ONBOARDING_STEPS = [
-    "Uppstartsmöte — vi går igenom mål, innehåll och design",
-    "Designriktning — vi enas om utseende och struktur",
-    "Vi bygger din sida",
-    "Din granskning — ett korrekturvarv",
-    "Tillägg — vi går igenom eventuella tillval (t.ex. e-post) och du bekräftar",
-    "Lansering på din domän",
-    "Klart — överlämning till löpande drift"
+    { title: "Uppstartsmöte", desc: "Vi bokar ett möte och går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Mötet är genomfört" },
+    { title: "Skicka önskemål & referenser", desc: "Efter mötet mejlar du in alla dina önskemål samt förslag på andra sajter vi kan använda som förebild/bas.", cta: "Jag har skickat mina önskemål", mail: true },
+    { title: "Designriktning", desc: "Vi tar fram ett designförslag och enas om utseende, färger och struktur.", cta: "Jag godkänner designriktningen" },
+    { title: "Vi bygger din sida", desc: "Vi bygger första versionen utifrån det vi kommit överens om. Du behöver inte göra något här.", cta: "Okej, jag inväntar utkastet" },
+    { title: "Din granskning", desc: "Du granskar sidan och lämnar återkoppling i ett (1) korrekturvarv.", cta: "Jag har granskat och godkänner" },
+    { title: "Tillägg & villkor", desc: "Vi går igenom eventuella tillval (t.ex. e-post) nedan, och du godkänner villkoren.", cta: "Jag är klar med tillägg & villkor" },
+    { title: "Lansering & överlämning", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Grattis!", cta: "Bekräfta lansering" }
   ];
 
   function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
@@ -411,23 +411,36 @@
     Promise.all([
       sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
       sb.from("agreement_acceptances").select("id").eq("user_id", session.user.id)
-        .eq("agreement_version", AGREEMENT.version).maybeSingle()
+        .eq("agreement_version", AGREEMENT.version).maybeSingle(),
+      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id)
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
       var accepted = !!(out[1] && out[1].data);
-      var stage = profile.onboarding_stage || 1;
-      var showSteps = stage < 7;
+      var checkoffs = out[2].error ? [] : (out[2].data || []);
+      var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
+      var current = 0;
+      for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!done[k]) { current = k; break; } }
+      var allDone = current === 0;
       var proposed = addons.filter(function (a) { return a.status === "proposed"; });
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
       var html = "";
 
-      if (showSteps) {
+      if (!allDone) {
         html += '<div class="card onb-card"><h2>Så sätter vi upp din sida</h2>' +
-          '<p class="muted">Här ser du var vi är i uppstarten. Vid steg 5 tar vi ställning till eventuella tillägg tillsammans.</p>' +
+          '<p class="muted">Bocka av varje steg allt eftersom. Det aktiva steget visar vad som gäller just nu.</p>' +
           '<ol class="onb-steps">' + ONBOARDING_STEPS.map(function (s, i) {
-            var n = i + 1, cls = n < stage ? "done" : (n === stage ? "current" : "");
-            return '<li class="' + cls + '"><span class="onb-dot">' + (n < stage ? "✓" : n) + "</span><span>" + esc(s) + "</span></li>";
+            var n = i + 1, isDone = !!done[n], isCur = (n === current);
+            var cls = isDone ? "done" : (isCur ? "current" : "upcoming");
+            var body = "";
+            if (isCur) {
+              body = '<div class="onb-step-desc">' + esc(s.desc) + "</div>" +
+                (s.mail ? '<p class="onb-step-desc"><a href="mailto:info@oakstride.se?subject=Mina%20önskemål%20och%20referenssajter">Öppna ett mejl till info@oakstride.se &rarr;</a></p>' : "") +
+                '<button class="btn btn-primary btn-sm btn-inline" data-step="' + n + '">' + esc(s.cta) + "</button>";
+            }
+            return '<li class="' + cls + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
+              '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) +
+              (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + "</span>" : "") + "</div>" + body + "</div></li>";
           }).join("") + "</ol></div>";
       }
 
@@ -473,12 +486,23 @@
           ab.addEventListener("click", function () { acceptTerms(ab); });
         }
       }
+      Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (btn) {
+        btn.addEventListener("click", function () { checkoffStep(Number(btn.getAttribute("data-step"))); });
+      });
       Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
         btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
       });
       Array.prototype.forEach.call(box.querySelectorAll("[data-decline]"), function (btn) {
         btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-decline")), "declined"); });
       });
+    });
+  }
+
+  function checkoffStep(n) {
+    sb.from("onboarding_checkoffs").insert({ user_id: session.user.id, step_no: n }).then(function (res) {
+      if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
+      toast("Steg godkänt!");
+      loadOnboarding();
     });
   }
 
@@ -797,19 +821,25 @@
     main.innerHTML = '<div class="spinner"></div>';
     Promise.all([
       sb.from("profiles").select("*").eq("id", pid).single(),
-      sb.from("addons").select("*").eq("user_id", pid).order("created_at")
+      sb.from("addons").select("*").eq("user_id", pid).order("created_at"),
+      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", pid)
     ]).then(function (out) {
       var p = out[0].data, addons = out[1].data || [];
       if (out[0].error || !p) { toast("Kunde inte hämta kunden.", true); renderAdminCustomers(); return; }
-      var stage = p.onboarding_stage || 1;
+      var done = {}; (out[2].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
+      var doneCount = Object.keys(done).length;
       main.innerHTML =
         '<button class="back-link" id="btn-back">&larr; Tillbaka till kunder</button>' +
         '<div class="card"><h1>' + esc(p.full_name || p.email) + "</h1>" +
         '<p class="muted">' + esc(p.email) + (p.company ? " · " + esc(p.company) : "") + (p.website ? " · " + esc(p.website) : "") + "</p>" +
-        '<label for="onb-stage">Uppstartssteg (det kunden ser som pågående)</label>' +
-        '<select id="onb-stage">' + ONBOARDING_STEPS.map(function (s, i) {
-          var n = i + 1; return '<option value="' + n + '"' + (stage === n ? " selected" : "") + ">" + n + ". " + esc(s) + "</option>";
-        }).join("") + "</select></div>" +
+        "<h2>Uppstartssteg — kundens framsteg (" + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
+        '<ol class="onb-steps admin-steps">' + ONBOARDING_STEPS.map(function (s, i) {
+          var n = i + 1, isDone = !!done[n];
+          return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
+            '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) +
+            (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + '</span> <button class="linklike" data-undo="' + n + '">Ångra</button>' : "") +
+            "</div></div></li>";
+        }).join("") + "</ol></div>" +
         '<div class="card"><h2>Föreslå tillägg</h2>' +
         '<p class="muted">Kunden får ett mejl och kan beställa eller avböja i portalen.</p>' +
         '<form id="form-addon">' +
@@ -823,9 +853,11 @@
         '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>";
 
       document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
-      document.getElementById("onb-stage").addEventListener("change", function (e) {
-        sb.from("profiles").update({ onboarding_stage: Number(e.target.value) }).eq("id", pid).then(function (r) {
-          if (r.error) toast("Kunde inte spara steg: " + r.error.message, true); else toast("Uppstartssteg uppdaterat.");
+      Array.prototype.forEach.call(document.querySelectorAll("[data-undo]"), function (btn) {
+        btn.addEventListener("click", function () {
+          sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo"))).then(function (r) {
+            if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
+          });
         });
       });
       document.getElementById("form-addon").addEventListener("submit", function (e) {
