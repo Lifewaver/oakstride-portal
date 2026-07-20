@@ -853,22 +853,68 @@
     }).join("");
   }
 
+  var SERVICE_KINDS = { doman: "Domän", epost: "E-post", hosting: "Hosting", betalvaxel: "Betalväxel", ovrigt: "Övrigt" };
+
+  function svcCost(s) {
+    if (s.cost == null || s.cost === "") return "";
+    var per = s.billing === "manad" ? "/mån" : (s.billing === "ar" ? "/år" : (s.billing === "engang" ? " (engång)" : ""));
+    return " · " + fmtKr(s.cost) + " kr" + per;
+  }
+  function servicesList(services) {
+    if (!services.length) return '<p class="muted">Inga tjänster registrerade ännu.</p>';
+    return services.map(function (s) {
+      return '<div class="addon"><div class="addon-main"><strong>' + esc(SERVICE_KINDS[s.kind] || s.kind) + ":</strong> " + esc(s.name) + esc(svcCost(s)) +
+        (s.detail ? '<div class="muted addon-desc">' + esc(s.detail) + "</div>" : "") + "</div>" +
+        '<button class="linklike" data-svcdel="' + s.id + '">Ta bort</button></div>';
+    }).join("");
+  }
+
   function renderAdminCustomerDetail(pid) {
     main.innerHTML = '<div class="spinner"></div>';
     Promise.all([
       sb.from("profiles").select("*").eq("id", pid).single(),
       sb.from("addons").select("*").eq("user_id", pid).order("created_at"),
-      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", pid)
+      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", pid),
+      sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
+      sb.from("customer_services").select("*").eq("user_id", pid).order("kind")
     ]).then(function (out) {
       var p = out[0].data, addons = out[1].data || [];
       if (out[0].error || !p) { toast("Kunde inte hämta kunden.", true); renderAdminCustomers(); return; }
       var done = {}; (out[2].data || []).forEach(function (r) { done[r.step_no] = r.done_at; });
       var doneCount = Object.keys(done).length;
+      var requests = out[3].data || [], services = out[4].data || [];
+      var newCount = requests.filter(function (r) { return r.status === "new"; }).length;
+      var site = (p.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+      var siteUrl = site ? "https://" + site : null;
+
       main.innerHTML =
         '<button class="back-link" id="btn-back">&larr; Tillbaka till kunder</button>' +
         '<div class="card"><h1>' + esc(p.full_name || p.email) + "</h1>" +
-        '<p class="muted">' + esc(p.email) + (p.company ? " · " + esc(p.company) : "") + (p.website ? " · " + esc(p.website) : "") + "</p>" +
-        "<h2>Uppstartssteg — kundens framsteg (" + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
+        '<p class="muted">' + esc(p.email) + (p.company ? " · " + esc(p.company) : "") + "</p>" +
+        (siteUrl
+          ? '<p><strong>Hemsida:</strong> <a href="' + esc(siteUrl) + '" target="_blank" rel="noopener">' + esc(site) + " &#8599;</a>" +
+            (p.github_repo ? '  ·  <span class="muted">Repo: ' + esc(p.github_repo) + "</span>" : "") + "</p>"
+          : '<p class="muted">Ingen hemsida kopplad ännu.</p>') + "</div>" +
+        '<div class="card"><h2>Ärenden' + (newCount ? ' <span class="chip chip-new">' + newCount + " nya</span>" : "") + "</h2>" +
+        (requests.length
+          ? '<div class="req-list">' + requests.map(function (r) {
+              return '<button class="req-item" data-req="' + r.id + '"><div class="req-item-top"><span class="req-title">' + esc(r.title) + "</span>" + chip(r.status, true) + "</div>" +
+                '<div class="req-meta">#' + r.id + " · " + fmtDate(r.created_at) + "</div></button>";
+            }).join("") + "</div>"
+          : '<p class="muted">Inga ärenden ännu.</p>') + "</div>" +
+        '<div class="card"><h2>Önskemål (projektförfrågan)</h2><div id="cust-briefs"><div class="spinner"></div></div></div>' +
+        '<div class="card"><h2>Tjänster — domän, e-post m.m.</h2>' +
+        '<div id="svc-list">' + servicesList(services) + "</div>" +
+        '<form id="form-svc" style="margin-top:1rem">' +
+        '<div class="addon-form-row">' +
+        '<div><label for="s-kind">Typ</label><select id="s-kind">' + Object.keys(SERVICE_KINDS).map(function (k) { return '<option value="' + k + '">' + SERVICE_KINDS[k] + "</option>"; }).join("") + "</select></div>" +
+        '<div style="flex:2"><label for="s-name">Namn/adress *</label><input type="text" id="s-name" required placeholder="t.ex. kundendomän.se eller Microsoft 365"></div>' +
+        "</div>" +
+        '<label for="s-detail">Detalj</label><input type="text" id="s-detail" placeholder="t.ex. leverantör, antal brevlådor, förnyelsedatum">' +
+        '<div class="addon-form-row"><div><label for="s-cost">Kostnad (kr)</label><input type="text" id="s-cost" placeholder="t.ex. 250"></div>' +
+        '<div><label for="s-billing">Period</label><select id="s-billing"><option value="">—</option><option value="ar">Per år</option><option value="manad">Per månad</option><option value="engang">Engång</option></select></div></div>' +
+        '<button type="submit" class="btn btn-primary btn-inline">Lägg till tjänst</button></form></div>' +
+        '<div class="card"><h2>Uppstartssteg — kundens framsteg (' + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
         '<ol class="onb-steps admin-steps">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, isDone = !!done[n];
           return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
@@ -886,14 +932,43 @@
         '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div>' +
         "</div>" +
         '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form></div>' +
-        '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>" +
-        '<div class="card"><h2>Projektförfrågan från denna kund</h2><div id="cust-briefs"><div class="spinner"></div></div></div>';
+        '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>";
 
       document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
+      Array.prototype.forEach.call(document.querySelectorAll("[data-req]"), function (btn) {
+        btn.addEventListener("click", function () { renderDetail(Number(btn.getAttribute("data-req")), true); });
+      });
       Array.prototype.forEach.call(document.querySelectorAll("[data-undo]"), function (btn) {
         btn.addEventListener("click", function () {
           sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo"))).then(function (r) {
             if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
+          });
+        });
+      });
+      document.getElementById("form-svc").addEventListener("submit", function (e) {
+        e.preventDefault();
+        var name = document.getElementById("s-name").value.trim();
+        if (!name) { toast("Ange namn/adress.", true); return; }
+        var costRaw = document.getElementById("s-cost").value.replace(",", ".").replace(/\s/g, "");
+        var cost = costRaw ? parseFloat(costRaw) : null;
+        if (costRaw && isNaN(cost)) { toast("Ogiltig kostnad.", true); return; }
+        sb.from("customer_services").insert({
+          user_id: pid,
+          kind: document.getElementById("s-kind").value,
+          name: name,
+          detail: document.getElementById("s-detail").value.trim() || null,
+          cost: cost,
+          billing: document.getElementById("s-billing").value || null
+        }).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          toast("Tjänst tillagd.");
+          renderAdminCustomerDetail(pid);
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll("[data-svcdel]"), function (btn) {
+        btn.addEventListener("click", function () {
+          sb.from("customer_services").delete().eq("id", Number(btn.getAttribute("data-svcdel"))).then(function (r) {
+            if (r.error) toast("Kunde inte ta bort: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
       });
