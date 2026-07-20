@@ -280,6 +280,132 @@
     return html + "</div>";
   }
 
+  // ---- Strukturerad kravspec-editor (admin) ----
+  function seTierBtn(tier) {
+    var t = tier === "extra" ? "extra" : "standard";
+    return '<button type="button" class="se-tier se-tier-' + t + '" data-tier="' + t + '">' + (t === "extra" ? "Extra" : "Standard") + "</button>";
+  }
+  function seDel(title) { return '<button type="button" class="se-del" title="' + (title || "Ta bort") + '">&times;</button>'; }
+  function seItemRow(text, tier) {
+    return '<div class="se-row"><input type="text" class="se-text" value="' + esc(text || "") + '">' + seTierBtn(tier) + seDel() + "</div>";
+  }
+  function seDetailRow(d) {
+    d = d || {};
+    var kinds = [["spec", "Specifikation"], ["tech", "Tekniskt krav"], ["change", "Ändring"]];
+    var opts = kinds.map(function (k) { return '<option value="' + k[0] + '"' + ((d.kind || "spec") === k[0] ? " selected" : "") + ">" + k[1] + "</option>"; }).join("");
+    return '<div class="se-drow"><input type="text" class="se-dtext" value="' + esc(d.text || "") + '" placeholder="Specifikation / krav / ändring">' +
+      '<select class="se-kind">' + opts + "</select>" + seTierBtn(d.tier) + seDel() + "</div>";
+  }
+  function sePage(p) {
+    p = p || {};
+    var details = (p.details || []).map(seDetailRow).join("");
+    return '<div class="se-page"><div class="se-row se-pagehead"><input type="text" class="se-pagename" value="' + esc(p.text || "") + '" placeholder="Sidnamn">' +
+      seTierBtn(p.tier) + seDel("Ta bort sida") + "</div>" +
+      '<div class="se-details">' + details + "</div>" +
+      '<button type="button" class="se-add-detail linklike">+ Lägg till detalj</button></div>';
+  }
+  function seExtraRow(i) {
+    i = i || {};
+    return '<div class="se-row"><input type="text" class="se-eh-label" value="' + esc(i.label || "") + '" placeholder="Beskrivning (t.ex. Uppsättning av e-post)">' +
+      '<input type="text" class="se-eh-hours" value="' + esc(i.hours != null && i.hours !== "" ? fmtHours(i.hours) : "") + '" placeholder="tim">' + seDel() + "</div>";
+  }
+  function seRecRow(i) {
+    i = i || {};
+    var periods = [["", "—"], ["manad", "/mån"], ["ar", "/år"], ["engang", "engång"]];
+    var opts = periods.map(function (p) { return '<option value="' + p[0] + '"' + ((i.period || "") === p[0] ? " selected" : "") + ">" + p[1] + "</option>"; }).join("");
+    return '<div class="se-row"><input type="text" class="se-rc-label" value="' + esc(i.label || "") + '" placeholder="Beskrivning">' +
+      '<input type="text" class="se-rc-amount" value="' + esc(i.amount != null && i.amount !== "" ? i.amount : "") + '" placeholder="kr">' +
+      '<select class="se-rc-period">' + opts + "</select>" + seDel() + "</div>";
+  }
+  function specEditorHtml(d) {
+    var sections = d.sections || {};
+    var dom = d.domain || {};
+    var html = '<div class="spec-ed">';
+    SPEC_SECTIONS.forEach(function (sec) {
+      html += '<div class="se-sec" data-key="' + sec.key + '"><h4>' + esc(sec.title) + "</h4>";
+      if (sec.key === "sidor") {
+        html += '<div class="se-pages">' + (sections.sidor || []).map(sePage).join("") + "</div>" +
+          '<button type="button" class="se-add-page btn btn-ghost btn-sm">+ Lägg till sida</button>';
+      } else {
+        html += '<div class="se-rows">' + (sections[sec.key] || []).map(function (i) { return seItemRow(i.text, i.tier); }).join("") + "</div>" +
+          '<button type="button" class="se-add-item btn btn-ghost btn-sm">+ Lägg till rad</button>';
+      }
+      html += "</div>";
+    });
+    html += '<div class="se-sec"><h4>Domän</h4><div class="addon-form-row">' +
+      '<div><select id="spec-domain"><option value="">—</option>' +
+      '<option value="egen"' + (dom.status === "egen" ? " selected" : "") + ">Egen domän</option>" +
+      '<option value="behover"' + (dom.status === "behover" ? " selected" : "") + ">Behöver hjälp att införskaffa</option></select></div>" +
+      '<div style="flex:2"><input type="text" id="spec-domain-name" placeholder="domännamn (t.ex. exempel.se)" value="' + esc(dom.name || "") + '"></div></div></div>';
+    html += '<div class="se-sec" data-block="extra"><h4>Extra arbete (utöver standard · ' + fmtKr(HOURLY_RATE) + ' kr/tim)</h4>' +
+      '<div class="se-rows se-rows-extra">' + (d.extra_hours || []).map(seExtraRow).join("") + "</div>" +
+      '<button type="button" class="se-add-extra btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
+    html += '<div class="se-sec" data-block="recurring"><h4>Löpande kostnader (självkostnad)</h4>' +
+      '<div class="se-rows se-rows-rec">' + (d.recurring_costs || []).map(seRecRow).join("") + "</div>" +
+      '<button type="button" class="se-add-recurring btn btn-ghost btn-sm">+ Lägg till rad</button></div>';
+    return html + "</div>";
+  }
+  function readSpecEditor(root) {
+    var sections = {};
+    SPEC_SECTIONS.forEach(function (sec) {
+      var secEl = root.querySelector('.se-sec[data-key="' + sec.key + '"]');
+      if (!secEl) { sections[sec.key] = []; return; }
+      if (sec.key === "sidor") {
+        sections.sidor = Array.prototype.map.call(secEl.querySelectorAll(".se-page"), function (pg) {
+          var details = Array.prototype.map.call(pg.querySelectorAll(".se-drow"), function (dr) {
+            return { text: dr.querySelector(".se-dtext").value.trim(), kind: dr.querySelector(".se-kind").value, tier: dr.querySelector(".se-tier").getAttribute("data-tier") };
+          }).filter(function (x) { return x.text; });
+          return { text: pg.querySelector(".se-pagename").value.trim(), tier: pg.querySelector(".se-pagehead .se-tier").getAttribute("data-tier"), details: details };
+        }).filter(function (p) { return p.text; });
+      } else {
+        sections[sec.key] = Array.prototype.map.call(secEl.querySelectorAll(".se-row"), function (r) {
+          return { text: r.querySelector(".se-text").value.trim(), tier: r.querySelector(".se-tier").getAttribute("data-tier") };
+        }).filter(function (x) { return x.text; });
+      }
+    });
+    var domStatus = root.querySelector("#spec-domain").value;
+    var domName = root.querySelector("#spec-domain-name").value.trim();
+    var extra = Array.prototype.map.call(root.querySelectorAll('[data-block="extra"] .se-row'), function (r) {
+      return { label: r.querySelector(".se-eh-label").value.trim(), hours: parseFloat(String(r.querySelector(".se-eh-hours").value).replace(",", ".")) || 0 };
+    }).filter(function (x) { return x.label; });
+    var recurring = Array.prototype.map.call(root.querySelectorAll('[data-block="recurring"] .se-row'), function (r) {
+      var amt = parseFloat(String(r.querySelector(".se-rc-amount").value).replace(",", ".").replace(/\s/g, ""));
+      return { label: r.querySelector(".se-rc-label").value.trim(), amount: isNaN(amt) ? null : amt, period: r.querySelector(".se-rc-period").value };
+    }).filter(function (x) { return x.label; });
+    return {
+      sections: sections,
+      domain: (domStatus || domName) ? { status: domStatus || null, name: domName || null } : null,
+      extra_hours: extra,
+      recurring_costs: recurring
+    };
+  }
+  function wireSpecEditor(root) {
+    var ed = root.querySelector(".spec-ed");
+    if (!ed) return;
+    ed.addEventListener("click", function (e) {
+      var t = e.target;
+      if (t.classList.contains("se-tier")) {
+        var next = t.getAttribute("data-tier") === "extra" ? "standard" : "extra";
+        t.setAttribute("data-tier", next);
+        t.className = "se-tier se-tier-" + next;
+        t.textContent = next === "extra" ? "Extra" : "Standard";
+      } else if (t.classList.contains("se-del")) {
+        var row = t.closest(".se-drow") || t.closest(".se-page") || t.closest(".se-row");
+        if (row) row.parentNode.removeChild(row);
+      } else if (t.classList.contains("se-add-item")) {
+        t.previousElementSibling.insertAdjacentHTML("beforeend", seItemRow("", "standard"));
+      } else if (t.classList.contains("se-add-page")) {
+        t.previousElementSibling.insertAdjacentHTML("beforeend", sePage({}));
+      } else if (t.classList.contains("se-add-detail")) {
+        t.previousElementSibling.insertAdjacentHTML("beforeend", seDetailRow({}));
+      } else if (t.classList.contains("se-add-extra")) {
+        t.previousElementSibling.insertAdjacentHTML("beforeend", seExtraRow({}));
+      } else if (t.classList.contains("se-add-recurring")) {
+        t.previousElementSibling.insertAdjacentHTML("beforeend", seRecRow({}));
+      }
+    });
+  }
+
   var sb = null;
   var session = null;
   var profile = null;
@@ -1278,25 +1404,10 @@
         '<textarea id="c5" rows="3" placeholder="Valfritt: vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
         '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
         '<div class="card"><h2>Kravspecifikation' + (latestSpec ? " — v" + latestSpec.version : " — ingen version ännu") + "</h2>" +
-        '<p class="muted">Standardformat, versionerat. Förifyllt med standardmall + projektförfrågan. Ett objekt per rad; inled raden med <strong>*</strong> för Extra (tillval). Att spara skapar en ny version.</p>' +
+        '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Att spara skapar en ny version.</p>' +
         '<form id="form-spec">' +
-        SPEC_SECTIONS.map(function (sec) {
-          var isSidor = sec.key === "sidor";
-          var val = isSidor ? sidorToText((specData.sections || {}).sidor) : specSectionToText((specData.sections || {})[sec.key]);
-          return '<label for="spec-' + sec.key + '">' + esc(sec.title) +
-            (isSidor ? ' <span class="muted spec-hint">— en sida per rad; rader som börjar med <strong>-</strong> blir detaljer under sidan (prefixa <strong>tech:</strong> eller <strong>change:</strong>, annars specifikation; <strong>*</strong> = extra)</span>' : "") + "</label>" +
-            '<textarea id="spec-' + sec.key + '" rows="' + (isSidor ? 8 : 3) + '">' + esc(val) + "</textarea>";
-        }).join("") +
-        '<label for="spec-domain">Domän</label>' +
-        '<div class="addon-form-row"><div><select id="spec-domain"><option value="">—</option>' +
-        '<option value="egen"' + (dm.status === "egen" ? " selected" : "") + ">Egen domän</option>" +
-        '<option value="behover"' + (dm.status === "behover" ? " selected" : "") + ">Behöver hjälp att införskaffa</option></select></div>" +
-        '<div style="flex:2"><input type="text" id="spec-domain-name" placeholder="domännamn (t.ex. exempel.se)" value="' + esc(dm.name || "") + '"></div></div>' +
-        '<label for="spec-extra">Extra arbete (utöver standard) — en rad per post: <em>beskrivning | timmar</em></label>' +
-        '<textarea id="spec-extra" rows="4" placeholder="Uppsättning av e-post | 1,5&#10;Konfiguration av M365 | 2">' + esc(extraHoursToText(specData.extra_hours)) + "</textarea>" +
-        '<label for="spec-recurring">Löpande kostnader, självkostnad — <em>beskrivning | belopp | mån/år/engång</em></label>' +
-        '<textarea id="spec-recurring" rows="3" placeholder="Domännamn exempel.se | 200 | år&#10;M365 Business Basic | 70 | mån">' + esc(recurringToText(specData.recurring_costs)) + "</textarea>" +
-        '<label for="spec-note">Ändringsnotering (vad ändras i denna version)</label>' +
+        specEditorHtml(specData) +
+        '<label for="spec-note" class="se-note-label">Ändringsnotering (vad ändras i denna version)</label>' +
         '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
         '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></form>' +
         (latestSpec && (specData.extra_hours || []).length
@@ -1375,22 +1486,11 @@
           renderAdminCustomerDetail(pid);
         });
       });
-      document.getElementById("form-spec").addEventListener("submit", function (e) {
+      var specForm = document.getElementById("form-spec");
+      wireSpecEditor(specForm);
+      specForm.addEventListener("submit", function (e) {
         e.preventDefault();
-        var sections = {};
-        SPEC_SECTIONS.forEach(function (sec) {
-          sections[sec.key] = sec.key === "sidor"
-            ? textToSidor(document.getElementById("spec-sidor").value)
-            : textToSpecItems(document.getElementById("spec-" + sec.key).value);
-        });
-        var domStatus = document.getElementById("spec-domain").value;
-        var domName = document.getElementById("spec-domain-name").value.trim();
-        var data = {
-          sections: sections,
-          domain: (domStatus || domName) ? { status: domStatus || null, name: domName || null } : null,
-          extra_hours: textToExtraHours(document.getElementById("spec-extra").value),
-          recurring_costs: textToRecurring(document.getElementById("spec-recurring").value)
-        };
+        var data = readSpecEditor(specForm);
         var nextVer = (latestSpec ? latestSpec.version : 0) + 1;
         sb.from("requirement_specs").insert({
           user_id: pid,
