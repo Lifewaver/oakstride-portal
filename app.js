@@ -515,7 +515,6 @@
         '<p class="muted">' + (allDone
           ? "Alla steg är klara — grattis! Du kan öppna varje steg för att se vad ni kommit fram till."
           : "Öppna varje steg för att se vad som gäller. Du kan alltid gå tillbaka och se vad du bockat av.") + "</p>" +
-        '<p class="onb-loop-info"><span class="onb-loop-badge">↻</span> Steg 3–5 (kravbild, godkännande och utkast) kan gå flera varv tills du är helt nöjd.</p>' +
         '<div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, dn = isDone(n), cur = (n === current);
           var cls = dn ? "done" : (cur ? "current" : "upcoming");
