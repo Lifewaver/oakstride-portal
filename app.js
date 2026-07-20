@@ -143,6 +143,50 @@
   function tierBadge(tier) {
     return tier === "extra" ? '<span class="tier tier-extra">Extra</span>' : '<span class="tier tier-standard">Standard</span>';
   }
+  var SPEC_KIND_LABELS = { spec: "Specifikation", tech: "Tekniskt krav", change: "Ändring" };
+  // Sidstruktur: varje sida har ev. underdetaljer (spec/tekniskt krav/ändring).
+  function sidorToText(items) {
+    return (items || []).map(function (p) {
+      var line = (p.tier === "extra" ? "* " : "") + p.text;
+      var det = (p.details || []).map(function (d) {
+        return "  - " + (d.tier === "extra" ? "* " : "") + (d.kind && d.kind !== "spec" ? d.kind + ": " : "") + d.text;
+      }).join("\n");
+      return det ? line + "\n" + det : line;
+    }).join("\n");
+  }
+  function textToSidor(text) {
+    var pages = [];
+    String(text || "").split("\n").forEach(function (raw) {
+      var t = raw.trim();
+      if (!t) return;
+      if (t.charAt(0) === "-") {
+        if (!pages.length) return;
+        t = t.replace(/^-\s*/, "");
+        var extra = false;
+        if (t.charAt(0) === "*") { extra = true; t = t.replace(/^\*\s*/, ""); }
+        var kind = "spec";
+        var m = t.match(/^(spec|tech|change)\s*:\s*/i);
+        if (m) { kind = m[1].toLowerCase(); t = t.slice(m[0].length); }
+        var pg = pages[pages.length - 1];
+        (pg.details = pg.details || []).push({ text: t.trim(), tier: extra ? "extra" : "standard", kind: kind });
+      } else {
+        var ex = false;
+        if (t.charAt(0) === "*") { ex = true; t = t.replace(/^\*\s*/, ""); }
+        pages.push({ text: t.trim(), tier: ex ? "extra" : "standard", details: [] });
+      }
+    });
+    return pages;
+  }
+  function renderSpecPage(p) {
+    var details = p.details || [];
+    var inner = details.length
+      ? '<ul class="spec-list">' + details.map(function (d) {
+          return '<li><span><span class="spec-kind spec-kind-' + (d.kind || "spec") + '">' + esc(SPEC_KIND_LABELS[d.kind] || "Specifikation") + "</span> " + esc(d.text) + "</span> " + tierBadge(d.tier) + "</li>";
+        }).join("") + "</ul>"
+      : '<p class="muted spec-empty">Inga specifikationer eller ändringar ännu.</p>';
+    return '<details class="spec-page"><summary class="spec-page-sum"><span class="spec-page-name">' + esc(p.text) + "</span> " + tierBadge(p.tier) +
+      '<span class="spec-page-chev" aria-hidden="true">▾</span></summary><div class="spec-page-body">' + inner + "</div></details>";
+  }
   // Läsvy av kravspecen (kund + admin). orderedAddons visas som beställda tillägg.
   function renderSpecView(data, orderedAddons, versionLabel) {
     var sections = (data && data.sections) || {};
@@ -152,11 +196,17 @@
     SPEC_SECTIONS.forEach(function (sec) {
       var items = sections[sec.key] || [];
       html += '<div class="spec-sec"><h4>' + esc(sec.title) + "</h4>";
-      html += items.length
-        ? '<ul class="spec-list">' + items.map(function (i) {
-            return "<li><span>" + esc(i.text) + "</span> " + tierBadge(i.tier) + "</li>";
-          }).join("") + "</ul>"
-        : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+      if (sec.key === "sidor") {
+        html += items.length
+          ? '<div class="spec-pages">' + items.map(renderSpecPage).join("") + "</div>"
+          : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+      } else {
+        html += items.length
+          ? '<ul class="spec-list">' + items.map(function (i) {
+              return "<li><span>" + esc(i.text) + "</span> " + tierBadge(i.tier) + "</li>";
+            }).join("") + "</ul>"
+          : '<p class="muted spec-empty">Fylls i efter hand.</p>';
+      }
       html += "</div>";
     });
     var extras = orderedAddons || [];
@@ -1144,8 +1194,11 @@
         '<p class="muted">Standardformat, versionerat. Förifyllt med standardmall + projektförfrågan. Ett objekt per rad; inled raden med <strong>*</strong> för Extra (tillval). Att spara skapar en ny version.</p>' +
         '<form id="form-spec">' +
         SPEC_SECTIONS.map(function (sec) {
-          return '<label for="spec-' + sec.key + '">' + esc(sec.title) + "</label>" +
-            '<textarea id="spec-' + sec.key + '" rows="3">' + esc(specSectionToText((specData.sections || {})[sec.key])) + "</textarea>";
+          var isSidor = sec.key === "sidor";
+          var val = isSidor ? sidorToText((specData.sections || {}).sidor) : specSectionToText((specData.sections || {})[sec.key]);
+          return '<label for="spec-' + sec.key + '">' + esc(sec.title) +
+            (isSidor ? ' <span class="muted spec-hint">— en sida per rad; rader som börjar med <strong>-</strong> blir detaljer under sidan (prefixa <strong>tech:</strong> eller <strong>change:</strong>, annars specifikation; <strong>*</strong> = extra)</span>' : "") + "</label>" +
+            '<textarea id="spec-' + sec.key + '" rows="' + (isSidor ? 8 : 3) + '">' + esc(val) + "</textarea>";
         }).join("") +
         '<label for="spec-note">Ändringsnotering (vad ändras i denna version)</label>' +
         '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
@@ -1225,7 +1278,11 @@
       document.getElementById("form-spec").addEventListener("submit", function (e) {
         e.preventDefault();
         var sections = {};
-        SPEC_SECTIONS.forEach(function (sec) { sections[sec.key] = textToSpecItems(document.getElementById("spec-" + sec.key).value); });
+        SPEC_SECTIONS.forEach(function (sec) {
+          sections[sec.key] = sec.key === "sidor"
+            ? textToSidor(document.getElementById("spec-sidor").value)
+            : textToSpecItems(document.getElementById("spec-" + sec.key).value);
+        });
         var nextVer = (latestSpec ? latestSpec.version : 0) + 1;
         sb.from("requirement_specs").insert({
           user_id: pid,
