@@ -664,19 +664,13 @@
           '<button class="linklike" id="btn-terms">Läs villkoren</button></div>';
       } else {
         html += '<div class="card onb-card"><h2>Godkänn villkoren</h2>' +
-          '<p class="muted">När du sett hur vi jobbar ovan — läs igenom och godkänn våra kundvillkor så kör vi igång. Du behöver godkänna innan du beställer tillägg.</p>' +
+          '<p class="muted">När du sett hur vi jobbar ovan — läs igenom och godkänn våra kundvillkor så kör vi igång.</p>' +
           '<div class="agreement-box">' + AGREEMENT.html + "</div>" +
           '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(AGREEMENT.version) + ").</span></label>" +
           '<button id="btn-agree" class="btn btn-primary" disabled>Godkänn villkoren</button>' +
           '<p id="agree-status" class="status-note" hidden></p></div>';
       }
 
-      if (proposed.length) {
-        html += '<div class="card onb-card"><h2>Tillägg att ta ställning till</h2>' +
-          '<p class="muted">Vi föreslår följande tillval till din sida. Beställ det du vill ha — du bekräftar priset här, inget dras utan ditt godkännande.</p>' +
-          (accepted ? "" : '<p class="status-note">Godkänn villkoren ovan för att kunna beställa.</p>') +
-          proposed.map(function (a) { return addonRowHtml(a, accepted); }).join("") + "</div>";
-      }
       if (ordered.length) {
         var eng = 0, man = 0;
         ordered.forEach(function (a) { if (a.billing === "manad") man += Number(a.price); else eng += Number(a.price); });
