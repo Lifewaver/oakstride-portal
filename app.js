@@ -1404,15 +1404,13 @@
         '<textarea id="c5" rows="3" placeholder="Valfritt: vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
         '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
         '<div class="card"><h2>Kravspecifikation' + (latestSpec ? " — v" + latestSpec.version : " — ingen version ännu") + "</h2>" +
-        '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Förhandsvisningen till höger uppdateras medan du skriver. Att spara skapar en ny version.</p>' +
-        '<div class="spec-edit-wrap">' +
+        '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Att spara skapar en ny version.</p>' +
         '<form id="form-spec">' +
         specEditorHtml(specData) +
         '<label for="spec-note" class="se-note-label">Ändringsnotering (vad ändras i denna version)</label>' +
         '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
-        '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></form>' +
-        '<div class="spec-preview-pane"><div class="spec-preview-h">Förhandsvisning — så här ser kunden det</div><div id="spec-preview"></div></div>' +
-        "</div>" +
+        '<div class="se-btn-row"><button type="button" id="btn-spec-preview" class="btn btn-ghost btn-inline">Förhandsvisa</button>' +
+        '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></div></form>' +
         (latestSpec && (specData.extra_hours || []).length
           ? '<p class="' + (latestExtraApproved ? "onb-verified" : "status-note") + '">' +
             (latestExtraApproved ? "✓ Kunden har godkänt det extra arbetet (v" + latestSpec.version + ")." : "Kunden har ännu inte godkänt det extra arbetet (v" + latestSpec.version + ").") + "</p>"
@@ -1491,14 +1489,22 @@
       });
       var specForm = document.getElementById("form-spec");
       wireSpecEditor(specForm);
-      function updateSpecPreview() {
-        var pv = document.getElementById("spec-preview");
-        if (pv) pv.innerHTML = renderSpecView(readSpecEditor(specForm), ordered, null);
-      }
-      specForm.addEventListener("input", updateSpecPreview);
-      specForm.addEventListener("change", updateSpecPreview);
-      specForm.addEventListener("click", function () { updateSpecPreview(); });
-      updateSpecPreview();
+      var previewBtn = document.getElementById("btn-spec-preview");
+      if (previewBtn) previewBtn.addEventListener("click", function () {
+        var inner = renderSpecView(readSpecEditor(specForm), ordered, latestSpec ? ("Utkast (baserat på v" + latestSpec.version + ")") : "Utkast");
+        var w = window.open("", "specpreview", "width=560,height=820,scrollbars=yes");
+        if (!w) { toast("Tillåt popup-fönster för att förhandsvisa.", true); return; }
+        var css = location.origin + "/styles.css";
+        w.document.open();
+        w.document.write('<!doctype html><html lang="sv"><head><meta charset="utf-8">' +
+          '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+          "<title>Förhandsvisning – kravspecifikation</title>" +
+          '<link rel="stylesheet" href="' + css + '">' +
+          "<style>body{background:#f4f6f4;margin:0;padding:1.2rem}.pvwrap{max-width:640px;margin:0 auto}h1{font-size:1.05rem;color:#1e3a2f;margin:0 0 1rem}</style></head>" +
+          '<body><div class="pvwrap"><h1>Förhandsvisning — så här ser kunden kravspecen</h1>' +
+          '<div class="card spec-card">' + inner + "</div></div></body></html>");
+        w.document.close();
+      });
       specForm.addEventListener("submit", function (e) {
         e.preventDefault();
         var data = readSpecEditor(specForm);
