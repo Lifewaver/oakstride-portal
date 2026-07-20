@@ -763,6 +763,27 @@
     loadOnboarding();
   }
 
+  // Öppnar innehåll i ett eget fönster med portalens stilmall (kravspec, villkor).
+  function openPopupDoc(title, heading, innerHtml) {
+    var w = window.open("", "oakpopup", "width=640,height=860,scrollbars=yes");
+    if (!w) { toast("Tillåt popup-fönster för att öppna.", true); return; }
+    var css = location.origin + "/styles.css";
+    w.document.open();
+    w.document.write('<!doctype html><html lang="sv"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      "<title>" + esc(title) + "</title>" +
+      '<link rel="stylesheet" href="' + css + '">' +
+      "<style>body{background:#f4f6f4;margin:0;padding:1.2rem}.pvwrap{max-width:660px;margin:0 auto}h1{font-size:1.15rem;color:#1e3a2f;margin:0 0 1rem}</style></head>" +
+      '<body><div class="pvwrap"><h1>' + esc(heading) + "</h1>" + innerHtml + "</div></body></html>");
+    w.document.close();
+  }
+  function openSpecWindow(data, ordered, versionLabel) {
+    openPopupDoc("Kravspecifikation & offert", "Din kravspecifikation & offert", '<div class="card spec-card">' + renderSpecView(data, ordered, versionLabel) + "</div>");
+  }
+  function openTermsWindow(ag) {
+    openPopupDoc("OakStrides kundvillkor", esc(ag.title) + " (version " + esc(ag.version) + ")", '<div class="card"><div class="agreement-box">' + ag.html + "</div></div>");
+  }
+
   function loadOnboarding() {
     var box = document.getElementById("onboarding-box");
     if (!box) return;
@@ -853,7 +874,8 @@
               if (content[3] && content[3].body) body += '<div class="onb-content-block"><strong>Sammanfattning från uppstartsmötet</strong>' + esc(content[3].body).replace(/\n/g, "<br>") + "</div>";
               body += '<p class="muted">Din kravspecifikation och offert finns i panelen längre ned (version ' + spec.version + "). Läs igenom och godkänn nedan.</p>" +
                 clarFormHtml() +
-                '<div class="onb-terms-block"><h4>Villkor</h4><div class="agreement-box">' + custAgreement.html + "</div>" +
+                '<div class="onb-terms-block"><h4>Villkor</h4>' +
+                '<p><button type="button" class="btn btn-ghost btn-sm" id="btn-open-terms">Öppna villkoren &#8599;</button></p>' +
                 '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(custAgreement.version) + ").</span></label></div>" +
                 billingFormHtml(billing) +
                 '<button id="btn-approve-offer" class="btn btn-primary btn-inline" disabled>Godkänn offert &amp; villkor</button>';
@@ -894,18 +916,22 @@
             '<div class="onb-acc-body">' + body + "</div></details>";
         }).join("") + "</div></div>";
 
-      html += '<div class="card onb-card spec-card"><h2>Din kravspecifikation & offert</h2>' +
+      html += '<div class="card onb-card"><h2>Din kravspecifikation & offert</h2>' +
         '<p class="muted">' + (spec
-          ? "Så här har vi dokumenterat era krav och priser. Den versioneras när ni kompletterar eller ändrar."
-          : "Så här kommer vi sammanfatta era krav och priser. Panelen fylls på genom flödet.") + "</p>" +
-        renderSpecView(spec ? spec.data : specFromBrief(brief), ordered,
-          spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu") +
-        "</div>";
+          ? "Hela kravspecifikationen och offerten (version " + spec.version + ") öppnas i ett eget fönster."
+          : "En förhandsvisning av kravspecifikationen öppnas i ett eget fönster. Den fylls på genom flödet.") + "</p>" +
+        '<button type="button" class="btn btn-primary btn-inline" id="btn-open-spec">Öppna kravspecifikation & offert &#8599;</button></div>';
 
       box.innerHTML = html;
 
+      var specForView = spec ? spec.data : specFromBrief(brief);
+      var specLabel = spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu";
+      var openSpecBtn = document.getElementById("btn-open-spec");
+      if (openSpecBtn) openSpecBtn.addEventListener("click", function () { openSpecWindow(specForView, ordered, specLabel); });
+      var openTermsBtn = document.getElementById("btn-open-terms");
+      if (openTermsBtn) openTermsBtn.addEventListener("click", function () { openTermsWindow(custAgreement); });
       var bt = document.getElementById("btn-terms");
-      if (bt) bt.addEventListener("click", function () { renderTermsView(renderCustomer); });
+      if (bt) bt.addEventListener("click", function () { openTermsWindow(custAgreement); });
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
       });
