@@ -93,15 +93,14 @@
     }
   }
 
-  // 6-stegsflödet. form: steg 1 markeras klart automatiskt via kundens projektförfrågan.
-  // content: OakStride lägger upp material (steg 3–5) som kunden verifierar. link: steg 5 visar utkastlänk.
+  // 5-stegsflödet. form: steg 1 klart via projektförfrågan. offer: steg 3 = godkänn
+  // kravspec/offert + villkor + faktureringsuppgifter. site: steg 4 = godkänn sida & konfig.
   var ONBOARDING_STEPS = [
     { title: "Projektförfrågan", desc: "Du fyller i vår projektförfrågan med din verksamhet, dina mål och exempel på sajter du gillar. Det är starten på resan.", form: true },
     { title: "Uppstartsmöte", desc: "Vi bokar och håller ett uppstartsmöte där vi går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Uppstartsmötet är genomfört" },
-    { title: "Verifiering av kravbild", desc: "Vi sammanställer era krav till en kravbild utifrån uppstartsmötet (transkribering + sammanfattning). Läs igenom och verifiera att allt stämmer. Vill du komplettera eller ändra något skriver du det direkt här nedan — vi uppdaterar kravbilden och du verifierar igen.", content: true, note: true, loop: true, cta: "Jag verifierar kravbilden" },
-    { title: "Komplett kravbild", desc: "När kravbilden är verifierad och komplett godkänner du den slutligt, så sätter vi igång bygget.", content: true, loop: true, cta: "Jag godkänner den kompletta kravbilden" },
-    { title: "Verifiering av utkast", desc: "Vi bygger ett utkast utifrån kravbilden. Granska det och verifiera att det stämmer. Behöver något justeras går vi tillbaka och uppdaterar — steg 3–5 kan upprepas tills du är helt nöjd.", content: true, link: true, loop: true, cta: "Jag har granskat och godkänner utkastet" },
-    { title: "Lansering", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Grattis — nu är ni live!", cta: "Bekräfta lansering" }
+    { title: "Godkänn kravspecifikation & offert", desc: "Här godkänner du kravspecifikationen och offerten (i panelen längre ned) samt våra villkor, och lämnar faktureringsuppgifter. Vill du ändra något — skicka en kommentar först, så uppdaterar vi och du godkänner sedan.", offer: true },
+    { title: "Godkänn sida & konfiguration", desc: "Vi bygger sidan och sätter upp konfigurationen. Granska och godkänn. Kommer du på något extra kan du skicka in det — då uppdaterar vi kravspecen/offerten och du godkänner den igen.", site: true },
+    { title: "Lansering", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Allt är klart — grattis, nu är ni live!", cta: "Bekräfta lansering" }
   ];
 
   function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
@@ -770,12 +769,12 @@
     Promise.all([
       sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
       sb.from("agreement_acceptances").select("agreement_version").eq("user_id", session.user.id),
-      sb.from("onboarding_checkoffs").select("step_no, done_at, with_extras").eq("user_id", session.user.id),
+      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id),
       sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
-      sb.from("onboarding_content").select("step_no, body, link, updated_at").eq("user_id", session.user.id),
-      sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", session.user.id),
+      sb.from("onboarding_content").select("step_no, body, link").eq("user_id", session.user.id),
       sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false }),
-      sb.from("extra_work_approvals").select("spec_version").eq("user_id", session.user.id)
+      sb.from("extra_work_approvals").select("spec_version").eq("user_id", session.user.id),
+      sb.from("billing_details").select("*").eq("user_id", session.user.id).maybeSingle()
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -783,201 +782,199 @@
       var briefs = out[3].error ? [] : (out[3].data || []);
       var brief = briefs[0] || null;
       var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
-      var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
-      var specs = out[6].error ? [] : (out[6].data || []);
+      var specs = out[5].error ? [] : (out[5].data || []);
       var spec = specs[0] || null;
-      // Kundens villkor byggs från kundens effektiva priser (kravspec-överskrivning, annars standard).
       custAgreement = buildAgreement(effectivePricing(spec ? spec.data : null));
       var acceptVersions = (out[1].error ? [] : (out[1].data || [])).map(function (a) { return a.agreement_version; });
-      var accepted = acceptVersions.indexOf(custAgreement.version) !== -1;
-      // Kunden har gjort en ändring/förtydligande om det finns en kund-genererad version.
-      var hasCustomerChange = specs.some(function (v) { return v.source === "kund"; });
-      var approvals = out[7].error ? [] : (out[7].data || []);
-      var extraApproved = !!(spec && approvals.some(function (a) { return a.spec_version === spec.version; }));
-      var done = {}, doneExtras = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
-      function extrasLabel(n) { return n === 3 && done[3] ? (doneExtras[3] ? " (med tillägg)" : " (utan tillägg)") : ""; }
+      var termsAccepted = acceptVersions.indexOf(custAgreement.version) !== -1;
+      var approvals = out[6].error ? [] : (out[6].data || []);
+      var offerApproved = !!(spec && approvals.some(function (a) { return a.spec_version === spec.version; }));
+      var billing = (out[7] && out[7].data) ? out[7].data : null;
+      var billingComplete = !!(billing && billing.company && billing.org_nr && billing.invoice_email);
+      var ordered = addons.filter(function (a) { return a.status === "ordered"; });
+      var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
 
-      function isDone(n) { return n === 1 ? !!brief : !!done[n]; }
-      function doneDate(n) { return n === 1 ? (brief && brief.created_at) : done[n]; }
-      function contentReady(n) { var c = content[n]; return n === 5 ? !!(c && (c.link || c.body)) : !!(c && c.body); }
-      // Steg 3 & 4 (kravbild) är redo när en kravspec finns; steg 5 (utkast) när utkastet lagts upp.
-      function stepReady(n) { return (n === 3 || n === 4) ? !!spec : (n === 5 ? contentReady(5) : true); }
-
+      function utkastReady() { var c = content[5]; return !!(c && (c.link || c.body)); }
+      function isDone(n) {
+        if (n === 1) return !!brief;
+        if (n === 3) return !!(spec && offerApproved && termsAccepted && billingComplete);
+        return !!done[n];
+      }
       var current = 0;
       for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!isDone(k)) { current = k; break; } }
       var allDone = current === 0;
-      var proposed = addons.filter(function (a) { return a.status === "proposed"; });
-      var ordered = addons.filter(function (a) { return a.status === "ordered"; });
+
+      function clarFormHtml() {
+        var pages = (((spec.data || {}).sections || {}).sidor || []).map(function (i) { return i.text; });
+        var opts = '<option value="Hela siten">Hela siten</option>' + pages.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + "</option>"; }).join("");
+        return '<div class="onb-clar"><label for="clar-scope">Skicka en kommentar eller ändring</label>' +
+          '<div class="onb-clar-row"><span class="onb-clar-lbl">Gäller:</span><select id="clar-scope">' + opts + "</select></div>" +
+          '<textarea id="clar-text" rows="3" placeholder="Beskriv vad du vill ändra eller lägga till..."></textarea>' +
+          '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-clar="1">Skicka</button>' +
+          '<span class="muted onb-clar-hint">Dokumenteras i kravspecen som en ny version — du godkänner sedan den uppdaterade offerten.</span></div></div>';
+      }
+      function billingFormHtml(b) {
+        b = b || {};
+        function f(id, label, val, ph) { return '<label for="' + id + '">' + esc(label) + "</label><input type=\"text\" id=\"" + id + '" value="' + esc(val || "") + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : "") + ">"; }
+        return '<div class="onb-billing"><h4>Faktureringsuppgifter</h4>' +
+          f("bill-company", "Företagsnamn *", b.company) +
+          f("bill-org", "Org.nr *", b.org_nr, "556000-0000") +
+          f("bill-addr", "Fakturaadress", b.address) +
+          f("bill-postcity", "Postnr & ort", b.postal_city) +
+          f("bill-email", "Fakturamejl *", b.invoice_email, "faktura@foretag.se") +
+          f("bill-ref", "Er referens / inköpsordernr", b.reference) + "</div>";
+      }
 
       var html = '<div class="card onb-card"><h2>Din resa mot en ny sida</h2>' +
-        '<p class="muted">' + (allDone
-          ? "Alla steg är klara — grattis! Du kan öppna varje steg för att se vad ni kommit fram till."
-          : "Öppna varje steg för att se vad som gäller. Du kan alltid gå tillbaka och se vad du bockat av.") + "</p>" +
+        '<p class="muted">' + (allDone ? "Alla steg är klara — grattis!" : "Öppna varje steg för att se vad som gäller. Du kan alltid gå tillbaka och se vad du bockat av.") + "</p>" +
         '<div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, dn = isDone(n), cur = (n === current);
           var cls = dn ? "done" : (cur ? "current" : "upcoming");
-          var meta = dn ? '<span class="onb-acc-meta">✓ ' + fmtDate(doneDate(n)) + extrasLabel(n) + "</span>"
-            : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
-          var body = (s.loop ? '<p class="onb-loop-note"><span class="onb-loop-badge">↻</span> Iterativt steg — kan upprepas tills du är nöjd.</p>' : "") +
-            '<div class="onb-step-desc">' + esc(s.desc) + "</div>";
+          var meta = dn ? '<span class="onb-acc-meta">✓ klart</span>' : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
+          var body = '<div class="onb-step-desc">' + esc(s.desc) + "</div>";
 
           if (s.form) {
             body += brief
               ? '<div class="onb-content-block"><strong>Din projektförfrågan</strong>' +
                 '<div class="detail-desc">' + esc(brief.description) + "</div>" +
                 (brief.example_sites ? '<p style="margin:.5rem 0 .2rem"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(brief.example_sites) + "</div>" : "") + "</div>"
-              : '<p class="muted">Vi hittar ingen projektförfrågan på din e-post ännu. Fyllde du i formuläret på oakstride.se? Hör av dig till info@oakstride.se så hjälper vi dig.</p>';
+              : '<p class="muted">Vi hittar ingen projektförfrågan på din e-post ännu. Hör av dig till info@oakstride.se så hjälper vi dig.</p>';
           }
 
-          // Steg 3 & 4: kravbilden ÄR kravspecifikationen (visas i panelen längre ned).
-          if (n === 3 || n === 4) {
-            if (spec) {
-              if (n === 3 && content[3] && content[3].body) {
-                body += '<div class="onb-content-block"><strong>Sammanfattning från uppstartsmötet</strong>' + esc(content[3].body).replace(/\n/g, "<br>") + "</div>";
-              }
-              body += '<p class="muted">Din kravbild finns samlad i <strong>kravspecifikationen</strong> längre ned (version ' + spec.version + "). " +
-                (n === 3
-                  ? "Läs igenom och verifiera att allt stämmer. Vill du förtydliga eller ändra något — per sida eller för hela siten — gör du det här:"
-                  : "När kravbilden är komplett och rätt godkänner du den här.") + "</p>";
-              if (n === 3) {
-                var pages = (((spec.data || {}).sections || {}).sidor || []).map(function (i) { return i.text; });
-                var opts = '<option value="Hela siten">Hela siten</option>' + pages.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + "</option>"; }).join("");
-                body += '<div class="onb-clar"><label for="clar-scope">Förtydliga eller ändra kravbilden</label>' +
-                  '<div class="onb-clar-row"><span class="onb-clar-lbl">Gäller:</span><select id="clar-scope">' + opts + "</select></div>" +
-                  '<textarea id="clar-text" rows="3" placeholder="Beskriv vad du vill förtydliga eller ändra..."></textarea>' +
-                  '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-clar="1">Skicka förtydligande</button>' +
-                  '<span class="muted onb-clar-hint">Dokumenteras i kravspecifikationen som en ny version.</span></div></div>';
-              }
+          if (s.offer) {
+            if (!spec) {
+              body += '<p class="muted">Kravspecifikationen och offerten sammanställs av OakStride efter uppstartsmötet. Du får ett mejl när den är redo att godkänna.</p>';
+            } else if (dn) {
+              body += '<p class="onb-verified">✓ Du har godkänt offerten (v' + spec.version + ") och villkoren (v " + esc(custAgreement.version) + ").</p>" +
+                '<p><button class="linklike" id="btn-terms">Läs villkoren</button></p>' +
+                '<div class="onb-content-block"><strong>Faktureringsuppgifter</strong>' + esc(billing.company) +
+                (billing.org_nr ? " · " + esc(billing.org_nr) : "") + (billing.invoice_email ? "<br>" + esc(billing.invoice_email) : "") + "</div>";
+            } else if (cur) {
+              if (content[3] && content[3].body) body += '<div class="onb-content-block"><strong>Sammanfattning från uppstartsmötet</strong>' + esc(content[3].body).replace(/\n/g, "<br>") + "</div>";
+              body += '<p class="muted">Din kravspecifikation och offert finns i panelen längre ned (version ' + spec.version + "). Läs igenom och godkänn nedan.</p>" +
+                clarFormHtml() +
+                '<div class="onb-terms-block"><h4>Villkor</h4><div class="agreement-box">' + custAgreement.html + "</div>" +
+                '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(custAgreement.version) + ").</span></label></div>" +
+                billingFormHtml(billing) +
+                '<button id="btn-approve-offer" class="btn btn-primary btn-inline" disabled>Godkänn offert &amp; villkor</button>';
             } else {
-              body += '<p class="muted">Kravbilden sammanställs av OakStride efter uppstartsmötet. Du får ett mejl när den är redo att verifiera.</p>';
+              body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
             }
           }
 
-          // Steg 5: utkast att granska.
-          if (n === 5) {
-            if (contentReady(5)) {
+          if (s.site) {
+            if (!utkastReady()) {
+              body += '<p class="muted">Sidan och konfigurationen byggs av OakStride. Du får ett mejl när det är dags att granska och godkänna.</p>';
+            } else {
               var c5 = content[5];
               if (c5.body) body += '<div class="onb-content-block">' + esc(c5.body).replace(/\n/g, "<br>") + "</div>";
-              if (c5.link) {
-                var url5 = /^https?:\/\//.test(c5.link) ? c5.link : "https://" + c5.link;
-                body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(url5) + '" target="_blank" rel="noopener">Öppna utkastet &#8599;</a></p>';
+              if (c5.link) { var u = /^https?:\/\//.test(c5.link) ? c5.link : "https://" + c5.link; body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(u) + '" target="_blank" rel="noopener">Öppna sidan &#8599;</a></p>'; }
+              if (dn) {
+                body += '<p class="onb-verified">✓ Godkänt ' + fmtDate(done[4]) + "</p>";
+              } else if (cur) {
+                body += '<p class="muted">Kommer du på något extra? Skicka in det, så uppdaterar vi kravspecen/offerten och du godkänner den igen i steg 3.</p>' +
+                  clarFormHtml() +
+                  '<label class="onb-confirm"><input type="checkbox" data-step="4"> <span>Jag godkänner sidan och konfigurationen</span></label>';
+              } else {
+                body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
               }
-            } else {
-              body += '<p class="muted">Utkastet läggs upp av OakStride så snart det är byggt. Du får ett mejl när det är dags att granska.</p>';
             }
           }
 
-          if (dn) {
-            if (n !== 1) body += '<p class="onb-verified">✓ Verifierat ' + fmtDate(doneDate(n)) + extrasLabel(n) + "</p>";
-          } else if (cur && n !== 1) {
-            if (s.content && !stepReady(n)) {
-              body += '<p class="status-note">Blir tillgängligt när OakStride lagt upp kravbilden/utkastet.</p>';
-            } else if (n === 3) {
-              body += '<label class="onb-confirm"><input type="checkbox" data-verify3="' + (hasCustomerChange ? "1" : "0") + '"> <span>' +
-                (hasCustomerChange ? "Verifiera med tillägg" : "Verifiera") + "</span></label>";
-            } else {
-              body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
-            }
-          } else if (!cur && n !== 1) {
-            body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
+          if (n === 2 || n === 5) {
+            if (dn) body += '<p class="onb-verified">✓ Klart ' + fmtDate(done[n]) + "</p>";
+            else if (cur) body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
+            else body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
           }
 
           return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + ">" +
             '<summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + "</span>" +
-            '<span class="onb-acc-title">' + esc(s.title) + (s.loop ? ' <span class="onb-loop-badge sm" title="Kan upprepas tills du är nöjd">↻</span>' : "") + "</span>" + meta +
+            '<span class="onb-acc-title">' + esc(s.title) + "</span>" + meta +
             '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary>' +
             '<div class="onb-acc-body">' + body + "</div></details>";
         }).join("") + "</div></div>";
 
-      // Återkommande kravspecifikation — visas genom hela flödet och fylls på.
-      html += '<div class="card onb-card spec-card"><h2>Din kravspecifikation</h2>' +
+      html += '<div class="card onb-card spec-card"><h2>Din kravspecifikation & offert</h2>' +
         '<p class="muted">' + (spec
-          ? "Så här har vi dokumenterat era krav på sidan. Den byggs på genom flödet och versioneras när ni kompletterar eller ändrar."
-          : "Så här kommer vi sammanfatta era krav. Panelen fylls på mer och mer genom flödet.") + "</p>" +
+          ? "Så här har vi dokumenterat era krav och priser. Den versioneras när ni kompletterar eller ändrar."
+          : "Så här kommer vi sammanfatta era krav och priser. Panelen fylls på genom flödet.") + "</p>" +
         renderSpecView(spec ? spec.data : specFromBrief(brief), ordered,
           spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu") +
         "</div>";
 
-      // Godkännande av extra arbete (extra timmar utöver standardsidan).
-      var extraHours = spec && spec.data && spec.data.extra_hours ? spec.data.extra_hours : [];
-      if (extraHours.length) {
-        var th = extraHours.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
-        html += '<div class="card onb-card"><h2>Godkänn extra arbete</h2>' +
-          '<p class="muted">Utöver standardsidan tillkommer extra arbete (se ”Extra arbete” i kravspecifikationen ovan) — uppskattat ' +
-          fmtHours(th) + " tim ≈ " + fmtKr(Math.round(th * specRateSetup(spec.data))) + ' kr, exkl. moms. Det debiteras per nedlagd timme à ' + fmtKr(specRateSetup(spec.data)) + " kr. Godkänn att vi får utföra och fakturera det.</p>" +
-          (extraApproved
-            ? '<p class="onb-verified">✓ Du har godkänt det extra arbetet (version ' + spec.version + ").</p>"
-            : '<label class="onb-confirm"><input type="checkbox" data-approve-extra="' + spec.version + '"> <span>Jag godkänner det extra arbetet och att det faktureras per timme</span></label>') +
-          "</div>";
-      }
-
-      // Villkoren godkänns HÄR, inuti flödet — inte som en vägg innan man kommer in.
-      if (accepted) {
-        html += '<div class="card onb-card onb-terms-ok"><span class="chip chip-approved">✓ Villkor godkända</span> ' +
-          '<span class="muted">Du har godkänt OakStrides kundvillkor (v ' + esc(custAgreement.version) + "). </span>" +
-          '<button class="linklike" id="btn-terms">Läs villkoren</button></div>';
-      } else {
-        html += '<div class="card onb-card"><h2>Godkänn villkoren</h2>' +
-          '<p class="muted">När du sett hur vi jobbar ovan — läs igenom och godkänn våra kundvillkor så kör vi igång.</p>' +
-          '<div class="agreement-box">' + custAgreement.html + "</div>" +
-          '<label class="agree-check"><input type="checkbox" id="agree-cb"> <span>Jag har läst och godkänner OakStrides kundvillkor (version ' + esc(custAgreement.version) + ").</span></label>" +
-          '<button id="btn-agree" class="btn btn-primary" disabled>Godkänn villkoren</button>' +
-          '<p id="agree-status" class="status-note" hidden></p></div>';
-      }
-
-      if (ordered.length) {
-        var eng = 0, man = 0;
-        ordered.forEach(function (a) { if (a.billing === "manad") man += Number(a.price); else eng += Number(a.price); });
-        html += '<div class="card onb-card"><h2>Beställda tillägg</h2>' +
-          ordered.map(function (a) { return addonRowHtml(a, false); }).join("") +
-          '<p class="onb-sum">' + (eng ? "Engång: " + fmtKr(eng) + " kr" : "") +
-          (eng && man ? " · " : "") + (man ? "Löpande: " + fmtKr(man) + " kr/mån" : "") +
-          " <span class=\"muted\">(exkl. moms)</span></p></div>";
-      }
-
       box.innerHTML = html;
 
-      if (accepted) {
-        var bt = document.getElementById("btn-terms");
-        if (bt) bt.addEventListener("click", function () { renderTermsView(renderCustomer); });
-      } else {
-        var cb = document.getElementById("agree-cb"), ab = document.getElementById("btn-agree");
-        if (cb && ab) {
-          cb.addEventListener("change", function () { ab.disabled = !cb.checked; });
-          ab.addEventListener("click", function () { acceptTerms(ab); });
-        }
-      }
+      var bt = document.getElementById("btn-terms");
+      if (bt) bt.addEventListener("click", function () { renderTermsView(renderCustomer); });
       Array.prototype.forEach.call(box.querySelectorAll("[data-step]"), function (cb) {
         cb.addEventListener("change", function () { if (cb.checked) checkoffStep(Number(cb.getAttribute("data-step"))); });
-      });
-      Array.prototype.forEach.call(box.querySelectorAll("[data-verify3]"), function (cb) {
-        cb.addEventListener("change", function () { if (cb.checked) checkoffStep(3, cb.getAttribute("data-verify3") === "1"); });
-      });
-      var approveBtn = box.querySelector("[data-approve-extra]");
-      if (approveBtn) approveBtn.addEventListener("change", function () {
-        if (approveBtn.checked) saveExtraApproval(Number(approveBtn.getAttribute("data-approve-extra")));
       });
       var clarBtn = box.querySelector("[data-clar]");
       if (clarBtn) clarBtn.addEventListener("click", function () {
         var text = document.getElementById("clar-text").value;
-        if (!text.trim()) { toast("Skriv vad du vill förtydliga.", true); return; }
+        if (!text.trim()) { toast("Skriv vad du vill ändra.", true); return; }
         saveSpecClarification(document.getElementById("clar-scope").value, text);
       });
-      Array.prototype.forEach.call(box.querySelectorAll("[data-order]"), function (btn) {
-        btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-order")), "ordered"); });
-      });
-      Array.prototype.forEach.call(box.querySelectorAll("[data-decline]"), function (btn) {
-        btn.addEventListener("click", function () { decideAddon(Number(btn.getAttribute("data-decline")), "declined"); });
+      var agreeCb = document.getElementById("agree-cb"), approveOfferBtn = document.getElementById("btn-approve-offer");
+      if (agreeCb && approveOfferBtn) {
+        agreeCb.addEventListener("change", function () { approveOfferBtn.disabled = !agreeCb.checked; });
+        approveOfferBtn.addEventListener("click", function () { approveOffer(spec, ordered, approveOfferBtn); });
+      }
+    });
+  }
+
+  function approveOffer(spec, ordered, btn) {
+    if (!spec) return;
+    function val(id) { var el = document.getElementById(id); return el ? (el.value || "").trim() : ""; }
+    var b = { company: val("bill-company"), org_nr: val("bill-org"), address: val("bill-addr") || null, postal_city: val("bill-postcity") || null, invoice_email: val("bill-email"), reference: val("bill-ref") || null };
+    if (!b.company || !b.org_nr || !b.invoice_email) { toast("Fyll i minst företagsnamn, org.nr och fakturamejl.", true); return; }
+    btn.disabled = true;
+    b.user_id = session.user.id; b.updated_at = new Date().toISOString();
+    sb.from("billing_details").upsert(b).then(function (r1) {
+      if (r1.error) { toast("Kunde inte spara faktureringsuppgifter: " + r1.error.message, true); btn.disabled = false; return; }
+      var summary = orderSummaryText(spec.data, ordered);
+      sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
+        sb.from("agreement_acceptances").insert({
+          user_id: session.user.id, agreement_version: custAgreement.version, document_title: custAgreement.title,
+          document_hash: hash, user_agent: navigator.userAgent, order_summary: summary
+        }).then(function (r2) {
+          if (r2.error && r2.error.code !== "23505") { toast("Kunde inte spara godkännande: " + r2.error.message, true); btn.disabled = false; return; }
+          sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: spec.version }).then(function () {
+            toast("Tack! Offert och villkor godkända — en orderbekräftelse skickas till din e-post.");
+            loadOnboarding();
+          });
+        });
       });
     });
   }
 
-  function checkoffStep(n, withExtras) {
-    var row = { user_id: session.user.id, step_no: n };
-    if (n === 3) row.with_extras = !!withExtras;
-    sb.from("onboarding_checkoffs").insert(row).then(function (res) {
+  function orderSummaryText(d, ord) {
+    var ep = effectivePricing(d);
+    var eh = (d && d.extra_hours) || [];
+    var totalH = eh.reduce(function (s, i) { return s + (Number(i.hours) || 0); }, 0);
+    var engAddons = (ord || []).filter(function (a) { return a.billing !== "manad"; });
+    var manAddons = (ord || []).filter(function (a) { return a.billing === "manad"; });
+    var totalEng = ep.site_price + Math.round(totalH * ep.rate_setup) + engAddons.reduce(function (s, a) { return s + Number(a.price || 0); }, 0);
+    var totalMan = ep.drift_month + manAddons.reduce(function (s, a) { return s + Number(a.price || 0); }, 0);
+    var L = ["ENGÅNGSKOSTNAD (exkl. moms):", "  Standardsida: " + fmtKr(ep.site_price) + " kr"];
+    eh.forEach(function (i) { L.push("  " + i.label + " (" + fmtHours(i.hours) + " tim): " + fmtKr(Math.round((Number(i.hours) || 0) * ep.rate_setup)) + " kr"); });
+    engAddons.forEach(function (a) { L.push("  " + a.title + ": " + fmtKr(a.price) + " kr"); });
+    L.push("  Summa engång: " + fmtKr(totalEng) + " kr", "", "LÖPANDE:", "  Drift & hosting: " + fmtKr(ep.drift_month) + " kr/mån");
+    manAddons.forEach(function (a) { L.push("  " + a.title + ": " + fmtKr(a.price) + " kr/mån"); });
+    L.push("  Summa löpande: " + fmtKr(totalMan) + " kr/mån");
+    var rc = (d && d.recurring_costs) || [];
+    if (rc.length) {
+      L.push("", "TREDJEPART (självkostnad, vidarefaktureras):");
+      rc.forEach(function (i) { L.push("  " + i.label + ": " + (i.amount == null || i.amount === "" ? "" : fmtKr(i.amount) + " kr" + periodSuffix(i.period))); });
+    }
+    L.push("", "Ändringar & löpande arbete efter lansering: " + fmtKr(ep.rate_change) + " kr/tim.");
+    return L.join("\n");
+  }
+
+  function checkoffStep(n) {
+    sb.from("onboarding_checkoffs").insert({ user_id: session.user.id, step_no: n }).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
-      toast(n === 3 ? ("Kravbilden verifierad " + (withExtras ? "med tillägg." : "utan tillägg.")) : "Steg godkänt!");
+      toast("Steg godkänt!");
       loadOnboarding();
     });
   }
@@ -1425,7 +1422,7 @@
       var dm = specData.domain || {};
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
       var step1Done = !!brief;
-      var doneCount = (step1Done ? 1 : 0) + [2, 3, 4, 5, 6].filter(function (n) { return !!done[n]; }).length;
+      var doneCount = (step1Done ? 1 : 0) + (latestExtraApproved ? 1 : 0) + [2, 4, 5].filter(function (n) { return !!done[n]; }).length;
       var newCount = requests.filter(function (r) { return r.status === "new"; }).length;
       var site = (p.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
       var siteUrl = site ? "https://" + site : null;
@@ -1464,26 +1461,26 @@
         '<button type="submit" class="btn btn-primary btn-inline">Lägg till tjänst</button></form></div>' +
         '<div class="card"><h2>Uppstartssteg — kundens framsteg (' + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
         '<ol class="onb-steps admin-steps">' + ONBOARDING_STEPS.map(function (s, i) {
-          var n = i + 1, isDone = n === 1 ? step1Done : !!done[n];
+          var n = i + 1, isDone = n === 1 ? step1Done : (n === 3 ? latestExtraApproved : !!done[n]);
           var dateBit = n === 1
             ? (step1Done ? ' <span class="onb-step-date">' + fmtDate(brief.created_at) + '</span> <span class="muted">(via projektförfrågan)</span>' : "")
-            : (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + "</span>" +
-                (n === 3 ? ' <span class="muted">(' + (doneExtras[3] ? "med tillägg" : "utan tillägg") + ")</span>" : "") +
-                ' <button class="linklike" data-undo="' + n + '">Ångra</button>' : "");
+            : n === 3
+              ? (isDone ? ' <span class="muted">(offert & villkor godkända av kund)</span>' : "")
+              : (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + '</span> <button class="linklike" data-undo="' + n + '">Ångra</button>' : "");
           return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
             '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) + dateBit + "</div></div></li>";
         }).join("") + "</ol></div>" +
-        '<div class="card"><h2>Material till kunden (steg 3 & 5)</h2>' +
-        '<p class="muted">Steg 3: valfri mötessammanfattning i text + transkribering (internt). Steg 5: länk till utkast. Själva kravbilden (steg 4) bor i kravspecifikationen nedan — inte här.</p>' +
+        '<div class="card"><h2>Material till kunden (steg 3 & 4)</h2>' +
+        '<p class="muted">Steg 3: valfri mötessammanfattning i text + transkribering (internt) — själva offerten bor i kravspecen nedan. Steg 4: länk till den byggda sidan/utkastet + ev. kommentar.</p>' +
         '<form id="form-content">' +
         '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet (valfri, visas för kunden)</label>' +
-        '<textarea id="c3" rows="5" placeholder="Kort recap av mötet i löpande text (kravbilden i detalj görs i kravspecen)...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+        '<textarea id="c3" rows="5" placeholder="Kort recap av mötet i löpande text...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
         '<label for="c3trans">Transkribering av uppstartsmötet (internt — visas ej för kunden)</label>' +
         '<textarea id="c3trans" rows="5" placeholder="Klistra in hela transkriberingen här som underlag...">' + esc(content[3] ? (content[3].transcript || "") : "") + "</textarea>" +
-        '<label for="c5link">Steg 5 — länk till utkast</label>' +
+        '<label for="c5link">Steg 4 — länk till den byggda sidan / utkastet</label>' +
         '<input type="text" id="c5link" placeholder="https://..." value="' + esc(content[5] ? (content[5].link || "") : "") + '">' +
-        '<label for="c5">Steg 5 — ev. kommentar till utkastet</label>' +
-        '<textarea id="c5" rows="3" placeholder="Valfritt: vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
+        '<label for="c5">Steg 4 — ev. kommentar (t.ex. vad kunden särskilt bör titta på)</label>' +
+        '<textarea id="c5" rows="3" placeholder="Valfritt...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
         '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
         '<div class="card"><h2>Kravspecifikation' + (latestSpec ? " — v" + latestSpec.version : " — ingen version ännu") + "</h2>" +
         '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Att spara skapar en ny version.</p>' +
