@@ -971,7 +971,8 @@
       sb.from("onboarding_content").select("step_no, body, link").eq("user_id", cuid()),
       sb.from("requirement_specs").select("*").eq("user_id", cuid()).order("version", { ascending: false }),
       sb.from("extra_work_approvals").select("spec_version").eq("user_id", cuid()),
-      sb.from("billing_details").select("*").eq("user_id", cuid()).maybeSingle()
+      sb.from("billing_details").select("*").eq("user_id", cuid()).maybeSingle(),
+      sb.from("site_change_proposals").select("*").eq("user_id", cuid()).order("created_at")
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -993,13 +994,32 @@
       var billingComplete = !!(billing && billing.company && billing.org_nr && billing.invoice_email);
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
       var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
+      var proposals = out[8] && !out[8].error ? (out[8].data || []) : [];
+      var cp = cprofile();
 
       function utkastReady() { var c = content[5]; return !!(c && (c.link || c.body)); }
       function isDone(n) {
         if (n === 1) return !!brief;
+        if (n === 2) return !!(cp.meeting_at || done[2]);
         if (n === 3) return !!(spec && hasApprovedOffer && hasAcceptedTerms && billingComplete);
         if (n === 4) return !!(done[4] && offerCurrentApproved);
+        if (n === 5) return !!cp.launched_at;
         return !!done[n];
+      }
+      function proposalsHtml(list) {
+        var thread = list.length
+          ? list.map(function (pr) {
+              var adm = pr.author_role === "admin";
+              return '<div style="border-left:3px solid ' + (adm ? "#2d5cc4" : "#1e3a2f") + ';background:#f4f6f4;padding:.5rem .7rem;border-radius:6px;margin:.4rem 0">' +
+                '<div class="muted" style="font-size:.8rem">' + (adm ? "OakStride" : "Du") + " · " + fmtDate(pr.created_at) + "</div>" +
+                "<div>" + esc(pr.body).replace(/\n/g, "<br>") + "</div></div>";
+            }).join("")
+          : '<p class="muted onb-hint-sm">Inga ändringsförslag ännu.</p>';
+        return '<div class="onb-content-block"><strong>Önskemål om ändringar</strong>' +
+          '<p class="muted onb-hint-sm">Skriv vad du vill ändra på sidan — vi ser det direkt, och våra förslag dyker upp här.</p>' +
+          thread +
+          '<textarea id="prop-text" rows="3" placeholder="Beskriv en ändring du vill ha..."></textarea>' +
+          '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-prop="1">Skicka förslag</button></div></div>';
       }
       var current = 0;
       for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!isDone(k)) { current = k; break; } }
@@ -1075,8 +1095,8 @@
               if (dn) {
                 body += '<p class="onb-verified">✓ Sida & konfiguration godkänd ' + fmtDate(done[4]) + " (offert v" + spec.version + ").</p>";
               } else if (cur) {
-                body += '<p class="muted">Kommer du på något extra? Skicka in det — då uppdaterar vi kravspecifikationen och offerten, och du godkänner den uppdaterade versionen här nedan innan vi bygger klart.</p>' +
-                  clarFormHtml() +
+                body += '<p class="muted">Granska sidan nedan. Önskar du ändringar? Skicka in dem här — vi bygger in dem och du godkänner sedan.</p>' +
+                  proposalsHtml(proposals) +
                   '<div class="onb-offer4"><h4>Kravspecifikation & offert (version ' + spec.version + ")</h4>" +
                   '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm js-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button></div>' +
                   (offerCurrentApproved
@@ -1091,9 +1111,18 @@
             }
           }
 
-          if (n === 2 || n === 5) {
-            if (dn) body += '<p class="onb-verified">✓ Klart ' + fmtDate(done[n]) + "</p>";
-            else if (cur) body += '<label class="onb-confirm"><input type="checkbox" data-step="' + n + '"> <span>' + esc(s.cta) + "</span></label>";
+          if (n === 2) {
+            if (cp.meeting_at) body += '<p class="onb-verified">✓ Uppstartsmöte: ' + fmtDate(cp.meeting_at) + "</p>";
+            else if (dn) body += '<p class="onb-verified">✓ Klart ' + fmtDate(done[2]) + "</p>";
+            else if (cur) body += '<p class="muted">Vi återkommer med tid för uppstartsmötet — eller bekräfta själv nedan när det är genomfört.</p>' +
+              '<label class="onb-confirm"><input type="checkbox" data-step="2"> <span>' + esc(s.cta) + "</span></label>";
+            else body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
+          }
+          if (n === 5) {
+            if (cp.launched_at) {
+              body += '<p class="onb-verified">🎉 Lanserad ' + fmtDate(cp.launched_at) + "</p>";
+              if (cp.launch_url) { var lu = /^https?:\/\//.test(cp.launch_url) ? cp.launch_url : "https://" + cp.launch_url; body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(lu) + '" target="_blank" rel="noopener">Öppna din sida &#8599;</a></p>'; }
+            } else if (cur) body += '<p class="muted">Vi lanserar sidan på din domän inom kort — du får ett mejl när den är live.</p>';
             else body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
           }
 
@@ -1122,6 +1151,12 @@
         var text = document.getElementById("clar-text").value;
         if (!text.trim()) { toast("Skriv vad du vill ändra.", true); return; }
         saveSpecClarification(document.getElementById("clar-scope").value, text);
+      });
+      var propBtn = box.querySelector("[data-prop]");
+      if (propBtn) propBtn.addEventListener("click", function () {
+        var t = document.getElementById("prop-text").value;
+        if (!t.trim()) { toast("Skriv vad du vill ändra.", true); return; }
+        postProposal(cuid(), "customer", t.trim());
       });
       var agreeCb = document.getElementById("agree-cb"), approveOfferBtn = document.getElementById("btn-approve-offer");
       if (agreeCb && approveOfferBtn) {
@@ -1218,6 +1253,15 @@
   }
 
   // Kundens förtydligande (per sida eller hela siten) dokumenteras i kravspecen som ny version.
+  function postProposal(uid, role, body) {
+    if (role === "customer" && previewBlocked()) return;
+    sb.from("site_change_proposals").insert({ user_id: uid, author_role: role, body: body }).then(function (res) {
+      if (res.error) { toast("Kunde inte skicka: " + res.error.message, true); return; }
+      toast(role === "admin" ? "Förslag skickat till kunden." : "Tack! Ditt förslag är skickat.");
+      if (role === "customer") loadOnboarding(); else renderAdminCustomerDetail(uid);
+    });
+  }
+
   function saveSpecClarification(scope, text) {
     if (previewBlocked()) return;
     sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null }).then(function (res) {
@@ -1709,7 +1753,8 @@
         sb.from("onboarding_content").select("step_no, body, link, transcript").eq("user_id", pid),
         sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid),
         sb.from("requirement_specs").select("*").eq("user_id", pid).order("version", { ascending: false }),
-        sb.from("extra_work_approvals").select("spec_version, approved_at").eq("user_id", pid)
+        sb.from("extra_work_approvals").select("spec_version, approved_at").eq("user_id", pid),
+        sb.from("site_change_proposals").select("*").eq("user_id", pid).order("created_at")
       ]).then(function (out) {
       var addons = out[0].data || [];
       var done = {}, doneExtras = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
@@ -1731,82 +1776,93 @@
       var site = (p.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
       var siteUrl = site ? "https://" + site : null;
 
+      var proposals = out[8] && !out[8].error ? (out[8].data || []) : [];
+      var mDone = { 1: step1Done, 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved, 4: !!done[4], 5: !!p.launched_at };
+      var mCurrent = 0; for (var mk = 1; mk <= ONBOARDING_STEPS.length; mk++) { if (!mDone[mk]) { mCurrent = mk; break; } }
+      function propThread(list) {
+        return list.length
+          ? list.map(function (pr) {
+              var adm = pr.author_role === "admin";
+              return '<div style="border-left:3px solid ' + (adm ? "#2d5cc4" : "#1e3a2f") + ';background:#f4f6f4;padding:.5rem .7rem;border-radius:6px;margin:.4rem 0">' +
+                '<div class="muted" style="font-size:.8rem">' + (adm ? "OakStride (du)" : esc(p.full_name || "Kund")) + " · " + fmtDate(pr.created_at) + "</div>" +
+                "<div>" + esc(pr.body).replace(/\n/g, "<br>") + "</div></div>";
+            }).join("")
+          : '<p class="muted">Inga ändringsförslag ännu.</p>';
+      }
+      function stepBody(n) {
+        if (n === 1) return brief
+          ? '<div class="detail-meta"><span>' + fmtDate(brief.created_at) + "</span></div><div class=\"detail-desc\">" + esc(brief.description) + "</div>" +
+            (brief.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(brief.example_sites) + "</div>" : "")
+          : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>';
+        if (n === 2) return '<label for="adm-meeting">Datum för uppstartsmötet (visas för kunden)</label>' +
+          '<input type="date" id="adm-meeting" value="' + esc(p.meeting_at || "") + '">' +
+          '<label for="adm-c3">Sammanfattning av mötet (visas för kunden)</label>' +
+          '<textarea id="adm-c3" rows="4" placeholder="Kort recap av mötet...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
+          '<label for="adm-c3trans">Transkribering (internt — visas ej för kunden)</label>' +
+          '<textarea id="adm-c3trans" rows="4" placeholder="Klistra in transkribering som underlag...">' + esc(content[3] ? (content[3].transcript || "") : "") + "</textarea>" +
+          '<button class="btn btn-primary btn-inline" data-save-step2="1">Spara uppstartsmöte</button>';
+        if (n === 3) return (latestExtraApproved
+            ? '<p class="onb-verified">✓ Kunden har godkänt kravspec &amp; offert' + (latestSpec ? " (v" + latestSpec.version + ")" : "") + "</p>"
+            : '<p class="status-note">Kunden har inte godkänt aktuell offert ännu.</p>') +
+          '<form id="form-spec">' + specEditorHtml(specData) +
+          '<label for="spec-note" class="se-note-label">Ändringsnotering</label>' +
+          '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
+          '<div class="se-btn-row"><button type="button" id="btn-spec-preview" class="btn btn-ghost btn-inline">Förhandsvisa</button>' +
+          '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></div></form>' +
+          (specs.length ? '<h3 class="spec-hist-h">Versioner</h3><ul class="spec-history">' + specs.map(function (v) {
+              var src = v.source === "kund" ? "kundens ändring" : (v.source === "baslinje" ? "baslinje" : "admin");
+              return "<li><strong>v" + v.version + "</strong> · " + fmtDate(v.created_at) + " · " + esc(src) + (v.change_note ? " — " + esc(v.change_note) : "") + "</li>";
+            }).join("") + "</ul>" : "") +
+          '<hr style="margin:1.2rem 0;border:0;border-top:1px solid #e2e6e2"><h3 style="margin:.4rem 0">Tillägg</h3>' +
+          '<form id="form-addon">' +
+          '<label for="a-title">Titel *</label><input type="text" id="a-title" required placeholder="t.ex. E-postlösning (Microsoft 365)">' +
+          '<label for="a-desc">Beskrivning</label><textarea id="a-desc" placeholder="Vad ingår, ev. att priset är självkostnad..."></textarea>' +
+          '<div class="addon-form-row"><div><label for="a-price">Pris (kr) *</label><input type="text" id="a-price" required placeholder="150"></div>' +
+          '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div></div>' +
+          '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form>' +
+          '<div id="admin-addons" style="margin-top:.8rem">' + adminAddonList(addons) + "</div>";
+        if (n === 4) return '<label for="adm-website">Kundens sid-adress</label>' +
+          '<div class="addon-form-row"><div style="flex:2"><input type="text" id="adm-website" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></div>' +
+          '<div><button class="btn btn-ghost btn-inline" data-save-website="1">Spara adress</button></div></div>' +
+          '<label for="adm-draft-link">Länk till utkast / byggd sida</label>' +
+          '<input type="text" id="adm-draft-link" value="' + esc(content[5] ? (content[5].link || "") : "") + '" placeholder="https://...">' +
+          '<label for="adm-draft-note">Kommentar till kunden (valfri)</label>' +
+          '<textarea id="adm-draft-note" rows="2" placeholder="Vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
+          '<button class="btn btn-primary btn-inline" data-send-draft="1">Skicka utkast</button>' +
+          (done[4] ? '<p class="onb-verified" style="margin-top:.6rem">✓ Kunden godkände sidan ' + fmtDate(done[4]) + ' <button class="linklike" data-undo="4">Ångra</button></p>' : '<p class="status-note" style="margin-top:.6rem">Väntar på kundens godkännande av sidan.</p>') +
+          '<hr style="margin:1.2rem 0;border:0;border-top:1px solid #e2e6e2"><h3 style="margin:.4rem 0">Ändringsförslag</h3>' +
+          '<p class="muted onb-hint-sm">Kundens önskemål och dina förslag — kunden ser tråden på steg 4.</p>' +
+          propThread(proposals) +
+          '<textarea id="adm-prop" rows="3" placeholder="Skriv ett förslag till kunden..."></textarea>' +
+          '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-admin-prop="1">Skicka förslag till kunden</button></div>';
+        if (n === 5) return p.launched_at
+          ? '<p class="onb-verified">🎉 Lanserad ' + fmtDate(p.launched_at) + "</p>" +
+            (p.launch_url ? '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(/^https?:\/\//.test(p.launch_url) ? p.launch_url : "https://" + p.launch_url) + '" target="_blank" rel="noopener">Öppna sidan &#8599;</a></p>' : "") +
+            '<button class="btn btn-ghost btn-sm" data-unlaunch="1">Ångra lansering</button>'
+          : '<label for="adm-launch-url">Länk till den färdiga sidan</label>' +
+            '<input type="text" id="adm-launch-url" value="' + esc(p.launch_url || "") + '" placeholder="https://kundendoman.se">' +
+            '<button class="btn btn-primary btn-inline" data-launch="1">Markera som lanserad</button>';
+        return "";
+      }
+
       main.innerHTML =
         '<button class="back-link" id="btn-back">&larr; Tillbaka till kunder</button>' +
-        '<div class="card"><h1>' + esc(p.full_name || p.email) + "</h1>" +
+        '<div class="card"><h1>' + esc(p.full_name || p.email) + "s resa mot en ny sida</h1>" +
         '<p class="muted">' + esc(p.email) + (p.company ? " · " + esc(p.company) : "") + "</p>" +
-        (siteUrl
-          ? '<p><strong>Hemsida:</strong> <a href="' + esc(siteUrl) + '" target="_blank" rel="noopener">' + esc(site) + " &#8599;</a>" +
-            (p.github_repo ? '  ·  <span class="muted">Repo: ' + esc(p.github_repo) + "</span>" : "") + "</p>"
-          : '<p class="muted">Ingen hemsida kopplad ännu.</p>') +
-        '<p style="margin-top:.8rem"><button id="btn-preview-portal" class="btn btn-ghost btn-sm">👁 Förhandsvisa kundens portal</button></p>' + "</div>" +
+        (siteUrl ? '<p><strong>Hemsida:</strong> <a href="' + esc(siteUrl) + '" target="_blank" rel="noopener">' + esc(site) + " &#8599;</a>" + (p.github_repo ? '  ·  <span class="muted">Repo: ' + esc(p.github_repo) + "</span>" : "") + "</p>" : "") +
+        '<p style="margin-top:.6rem"><button id="btn-preview-portal" class="btn btn-ghost btn-sm">👁 Förhandsvisa kundens portal</button></p>' + "</div>" +
+        '<div class="card onb-card"><div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
+          var n = i + 1, dn = mDone[n], cur = n === mCurrent;
+          var cls = dn ? "done" : (cur ? "current" : "upcoming");
+          var meta = dn ? '<span class="onb-acc-meta">✓ klart</span>' : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
+          return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + '><summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + '</span><span class="onb-acc-title">' + esc(s.title) + "</span>" + meta + '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary><div class="onb-acc-body">' + stepBody(n) + "</div></details>";
+        }).join("") + "</div></div>" +
         '<div class="card"><h2>Ärenden' + (newCount ? ' <span class="chip chip-new">' + newCount + " nya</span>" : "") + "</h2>" +
         (requests.length
           ? '<div class="req-list">' + requests.map(function (r) {
-              return '<button class="req-item" data-req="' + r.id + '"><div class="req-item-top"><span class="req-title">' + esc(r.title) + "</span>" + chip(r.status, true) + "</div>" +
-                '<div class="req-meta">#' + r.id + " · " + fmtDate(r.created_at) + "</div></button>";
+              return '<button class="req-item" data-req="' + r.id + '"><div class="req-item-top"><span class="req-title">' + esc(r.title) + "</span>" + chip(r.status, true) + '</div><div class="req-meta">#' + r.id + " · " + fmtDate(r.created_at) + "</div></button>";
             }).join("") + "</div>"
-          : '<p class="muted">Inga ärenden ännu.</p>') + "</div>" +
-        '<div class="card"><h2>Önskemål (projektförfrågan)</h2>' +
-        (brief
-          ? '<div class="detail-meta"><span>' + fmtDate(brief.created_at) + "</span></div>" +
-            '<div class="detail-desc">' + esc(brief.description) + "</div>" +
-            (brief.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(brief.example_sites) + "</div>" : "")
-          : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>') + "</div>" +
-        '<div class="card"><h2>Uppstartssteg — kundens framsteg (' + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
-        '<ol class="onb-steps admin-steps">' + ONBOARDING_STEPS.map(function (s, i) {
-          var n = i + 1, isDone = n === 1 ? step1Done : (n === 3 ? latestExtraApproved : !!done[n]);
-          var dateBit = n === 1
-            ? (step1Done ? ' <span class="onb-step-date">' + fmtDate(brief.created_at) + '</span> <span class="muted">(via projektförfrågan)</span>' : "")
-            : n === 3
-              ? (isDone ? ' <span class="muted">(offert & villkor godkända av kund)</span>' : "")
-              : (isDone ? ' <span class="onb-step-date">' + fmtDate(done[n]) + '</span> <button class="linklike" data-undo="' + n + '">Ångra</button>' : "");
-          return '<li class="' + (isDone ? "done" : "upcoming") + '"><span class="onb-dot">' + (isDone ? "✓" : n) + "</span>" +
-            '<div class="onb-step-main"><div class="onb-step-title">' + esc(s.title) + dateBit + "</div></div></li>";
-        }).join("") + "</ol></div>" +
-        '<div class="card"><h2>Material till kunden (steg 3 & 4)</h2>' +
-        '<p class="muted">Steg 3: valfri mötessammanfattning i text + transkribering (internt) — själva offerten bor i kravspecen nedan. Steg 4: länk till den byggda sidan/utkastet + ev. kommentar.</p>' +
-        '<form id="form-content">' +
-        '<label for="c3">Steg 3 — sammanfattning av uppstartsmötet (valfri, visas för kunden)</label>' +
-        '<textarea id="c3" rows="5" placeholder="Kort recap av mötet i löpande text...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
-        '<label for="c3trans">Transkribering av uppstartsmötet (internt — visas ej för kunden)</label>' +
-        '<textarea id="c3trans" rows="5" placeholder="Klistra in hela transkriberingen här som underlag...">' + esc(content[3] ? (content[3].transcript || "") : "") + "</textarea>" +
-        '<label for="c5link">Steg 4 — länk till den byggda sidan / utkastet</label>' +
-        '<input type="text" id="c5link" placeholder="https://..." value="' + esc(content[5] ? (content[5].link || "") : "") + '">' +
-        '<label for="c5">Steg 4 — ev. kommentar (t.ex. vad kunden särskilt bör titta på)</label>' +
-        '<textarea id="c5" rows="3" placeholder="Valfritt...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
-        '<button type="submit" class="btn btn-primary btn-inline">Spara material</button></form></div>' +
-        '<div class="card"><h2>Kravspecifikation' + (latestSpec ? " — v" + latestSpec.version : " — ingen version ännu") + "</h2>" +
-        '<p class="muted">Redigera direkt i strukturen. Klicka på <strong>Standard/Extra</strong> för att växla, och lägg till rader med knapparna. Att spara skapar en ny version.</p>' +
-        '<form id="form-spec">' +
-        specEditorHtml(specData) +
-        '<label for="spec-note" class="se-note-label">Ändringsnotering (vad ändras i denna version)</label>' +
-        '<input type="text" id="spec-note" placeholder="t.ex. Kompletterat efter uppstartsmötet">' +
-        '<div class="se-btn-row"><button type="button" id="btn-spec-preview" class="btn btn-ghost btn-inline">Förhandsvisa</button>' +
-        '<button type="submit" class="btn btn-primary btn-inline">Spara som ny version</button></div></form>' +
-        (latestSpec && (specData.extra_hours || []).length
-          ? '<p class="' + (latestExtraApproved ? "onb-verified" : "status-note") + '">' +
-            (latestExtraApproved ? "✓ Kunden har godkänt det extra arbetet (v" + latestSpec.version + ")." : "Kunden har ännu inte godkänt det extra arbetet (v" + latestSpec.version + ").") + "</p>"
-          : "") +
-        (specs.length
-          ? '<h3 class="spec-hist-h">Versioner</h3><ul class="spec-history">' + specs.map(function (v) {
-              var src = v.source === "kund" ? "kundens ändring" : (v.source === "baslinje" ? "baslinje" : "admin");
-              return "<li><strong>v" + v.version + "</strong> · " + fmtDate(v.created_at) + " · " + esc(src) +
-                (v.change_note ? " — " + esc(v.change_note) : "") + "</li>";
-            }).join("") + "</ul>"
-          : "") +
-        "</div>" +
-        '<div class="card"><h2>Föreslå tillägg</h2>' +
-        '<p class="muted">Kunden får ett mejl och kan beställa eller avböja i portalen.</p>' +
-        '<form id="form-addon">' +
-        '<label for="a-title">Titel *</label><input type="text" id="a-title" required placeholder="t.ex. E-postlösning (Microsoft 365)">' +
-        '<label for="a-desc">Beskrivning</label><textarea id="a-desc" placeholder="Vad ingår, ev. att priset är självkostnad, osv."></textarea>' +
-        '<div class="addon-form-row">' +
-        '<div><label for="a-price">Pris (kr, exkl. moms) *</label><input type="text" id="a-price" required placeholder="150"></div>' +
-        '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div>' +
-        "</div>" +
-        '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form></div>' +
-        '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>";
+          : '<p class="muted">Inga ärenden ännu.</p>') + "</div>";
 
       document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
       document.getElementById("btn-preview-portal").addEventListener("click", function () {
@@ -1822,22 +1878,53 @@
           });
         });
       });
-      document.getElementById("form-content").addEventListener("submit", function (e) {
-        e.preventDefault();
+      var saveStep2 = document.querySelector("[data-save-step2]");
+      if (saveStep2) saveStep2.addEventListener("click", function () {
         function v(id) { return document.getElementById(id).value.trim() || null; }
-        var now = new Date().toISOString();
-        var rows = [
-          { user_id: pid, step_no: 3, body: v("c3"), link: null, transcript: v("c3trans"), updated_at: now },
-          { user_id: pid, step_no: 5, body: v("c5"), link: v("c5link"), updated_at: now }
-        ];
-        sb.from("onboarding_content").upsert(rows, { onConflict: "user_id,step_no" }).then(function (r) {
+        Promise.all([
+          sb.from("profiles").update({ meeting_at: document.getElementById("adm-meeting").value || null }).eq("id", pid),
+          sb.from("onboarding_content").upsert({ user_id: pid, step_no: 3, body: v("adm-c3"), link: null, transcript: v("adm-c3trans"), updated_at: new Date().toISOString() }, { onConflict: "user_id,step_no" })
+        ]).then(function (rs) {
+          var err = rs[0].error || rs[1].error;
+          if (err) { toast("Kunde inte spara: " + err.message, true); return; }
+          toast("Uppstartsmöte sparat."); renderAdminCustomerDetail(pid);
+        });
+      });
+      var saveWeb = document.querySelector("[data-save-website]");
+      if (saveWeb) saveWeb.addEventListener("click", function () {
+        sb.from("profiles").update({ website: document.getElementById("adm-website").value.trim() || null }).eq("id", pid).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
-          toast("Material sparat.");
-          renderAdminCustomerDetail(pid);
+          toast("Sid-adress sparad."); renderAdminCustomerDetail(pid);
+        });
+      });
+      var sendDraft = document.querySelector("[data-send-draft]");
+      if (sendDraft) sendDraft.addEventListener("click", function () {
+        sb.from("onboarding_content").upsert({ user_id: pid, step_no: 5, body: document.getElementById("adm-draft-note").value.trim() || null, link: document.getElementById("adm-draft-link").value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "user_id,step_no" }).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          toast("Utkast skickat — kunden ser det på steg 4."); renderAdminCustomerDetail(pid);
+        });
+      });
+      var admProp = document.querySelector("[data-admin-prop]");
+      if (admProp) admProp.addEventListener("click", function () {
+        var t = document.getElementById("adm-prop").value;
+        if (!t.trim()) { toast("Skriv ett förslag.", true); return; }
+        postProposal(pid, "admin", t.trim());
+      });
+      var launchBtn = document.querySelector("[data-launch]");
+      if (launchBtn) launchBtn.addEventListener("click", function () {
+        sb.from("profiles").update({ launched_at: new Date().toISOString(), launch_url: document.getElementById("adm-launch-url").value.trim() || null }).eq("id", pid).then(function (r) {
+          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
+          toast("Markerad som lanserad — kunden ser det nu."); renderAdminCustomerDetail(pid);
+        });
+      });
+      var unlaunch = document.querySelector("[data-unlaunch]");
+      if (unlaunch) unlaunch.addEventListener("click", function () {
+        sb.from("profiles").update({ launched_at: null }).eq("id", pid).then(function (r) {
+          if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
         });
       });
       var specForm = document.getElementById("form-spec");
-      wireSpecEditor(specForm);
+      if (specForm) wireSpecEditor(specForm);
       var previewBtn = document.getElementById("btn-spec-preview");
       if (previewBtn) previewBtn.addEventListener("click", function () {
         var inner = renderSpecView(readSpecEditor(specForm), ordered, latestSpec ? ("Utkast (baserat på v" + latestSpec.version + ")") : "Utkast");
