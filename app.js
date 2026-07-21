@@ -524,6 +524,23 @@
   var profile = null;
   var adminTab = "arenden";
   var viewAsCustomer = false;
+  // Admin kan förhandsvisa en specifik kunds portal (skrivskyddat). När previewUid är satt
+  // läser kundvyerna mot den kunden, och alla kundåtgärder blockeras.
+  var previewUid = null;
+  var previewProfile = null;
+  function cuid() { return previewUid || (session && session.user && session.user.id); }
+  function cprofile() { return previewProfile || profile; }
+  function previewBlocked() {
+    if (previewUid) { toast("Förhandsvisning – du kan inte göra ändringar som kunden.", true); return true; }
+    return false;
+  }
+  function exitPreview() {
+    var pid = previewUid;
+    previewUid = null; previewProfile = null; viewAsCustomer = false;
+    var nav = document.getElementById("admin-nav"); if (nav) nav.hidden = !(profile && profile.is_admin);
+    var vb = document.getElementById("btn-viewas"); if (vb) vb.textContent = "Visa som kund";
+    if (pid) renderAdminCustomerDetail(pid); else renderAdmin();
+  }
 
   function show(name) {
     Object.keys(views).forEach(function (k) { views[k].hidden = k !== name; });
@@ -736,6 +753,7 @@
 
   document.getElementById("btn-viewas").addEventListener("click", function () {
     viewAsCustomer = !viewAsCustomer;
+    if (!viewAsCustomer) { previewUid = null; previewProfile = null; }
     this.textContent = viewAsCustomer ? "Tillbaka till admin" : "Visa som kund";
     document.getElementById("admin-nav").hidden = viewAsCustomer || !profile.is_admin;
     if (viewAsCustomer) renderCustomer(); else renderAdmin();
@@ -863,10 +881,16 @@
   // ---------- Kundvy ----------
 
   function renderCustomer() {
-    var site = (profile.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    var cp = cprofile();
+    var site = (cp.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     var siteUrl = site ? "https://" + site : null;
-    var firstName = (profile.full_name || "").split(" ")[0];
+    var firstName = (cp.full_name || "").split(" ")[0];
     main.innerHTML =
+      (previewUid
+        ? '<div style="background:#1e3a2f;color:#fff;padding:.6rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-size:.92rem">' +
+          '<span>👁 Förhandsvisar <strong>' + esc(cp.full_name || cp.email) + '</strong>s portal — skrivskyddat</span>' +
+          '<button id="btn-preview-exit" class="btn btn-ghost btn-sm" style="margin-left:auto;background:#fff">Avsluta förhandsvisning</button></div>'
+        : "") +
       '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
       '<div id="onboarding-box"></div>' +
       '<div class="dash-grid">' +
@@ -888,6 +912,10 @@
       '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
     document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
     document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
+    if (previewUid) {
+      var pe = document.getElementById("btn-preview-exit");
+      if (pe) pe.addEventListener("click", exitPreview);
+    }
     loadRequests(false);
     loadStats(site);
     loadOnboarding();
@@ -918,14 +946,14 @@
     var box = document.getElementById("onboarding-box");
     if (!box) return;
     Promise.all([
-      sb.from("addons").select("*").eq("user_id", session.user.id).order("created_at"),
-      sb.from("agreement_acceptances").select("agreement_version").eq("user_id", session.user.id),
-      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", session.user.id),
-      sb.from("project_briefs").select("description, example_sites, created_at").eq("email", profile.email).order("created_at", { ascending: false }),
-      sb.from("onboarding_content").select("step_no, body, link").eq("user_id", session.user.id),
-      sb.from("requirement_specs").select("*").eq("user_id", session.user.id).order("version", { ascending: false }),
-      sb.from("extra_work_approvals").select("spec_version").eq("user_id", session.user.id),
-      sb.from("billing_details").select("*").eq("user_id", session.user.id).maybeSingle()
+      sb.from("addons").select("*").eq("user_id", cuid()).order("created_at"),
+      sb.from("agreement_acceptances").select("agreement_version").eq("user_id", cuid()),
+      sb.from("onboarding_checkoffs").select("step_no, done_at").eq("user_id", cuid()),
+      sb.from("project_briefs").select("description, example_sites, created_at").eq("email", cprofile().email).order("created_at", { ascending: false }),
+      sb.from("onboarding_content").select("step_no, body, link").eq("user_id", cuid()),
+      sb.from("requirement_specs").select("*").eq("user_id", cuid()).order("version", { ascending: false }),
+      sb.from("extra_work_approvals").select("spec_version").eq("user_id", cuid()),
+      sb.from("billing_details").select("*").eq("user_id", cuid()).maybeSingle()
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -1087,6 +1115,7 @@
 
   // Steg 4: godkänn den uppdaterade kravspecen/offerten (faktureringsuppgifter finns redan).
   function approveUpdatedOffer(spec, ordered) {
+    if (previewBlocked()) return;
     if (!spec) return;
     var summary = orderSummaryText(spec.data, ordered);
     sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
@@ -1104,6 +1133,7 @@
   }
 
   function approveOffer(spec, ordered, btn) {
+    if (previewBlocked()) return;
     if (!spec) return;
     function val(id) { var el = document.getElementById(id); return el ? (el.value || "").trim() : ""; }
     var b = { company: val("bill-company"), org_nr: val("bill-org"), address: val("bill-addr") || null, postal_city: val("bill-postcity") || null, invoice_email: val("bill-email"), reference: val("bill-ref") || null };
@@ -1152,6 +1182,7 @@
   }
 
   function checkoffStep(n) {
+    if (previewBlocked()) return;
     sb.from("onboarding_checkoffs").insert({ user_id: session.user.id, step_no: n }).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Steg godkänt!");
@@ -1160,6 +1191,7 @@
   }
 
   function saveExtraApproval(version) {
+    if (previewBlocked()) return;
     sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: version }).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Tack! Det extra arbetet är godkänt.");
@@ -1169,6 +1201,7 @@
 
   // Kundens förtydligande (per sida eller hela siten) dokumenteras i kravspecen som ny version.
   function saveSpecClarification(scope, text) {
+    if (previewBlocked()) return;
     sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null }).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
       if (!res.data) { toast("Kravbilden är inte redo för förtydliganden ännu.", true); return; }
@@ -1187,6 +1220,7 @@
   }
 
   function decideAddon(id, status) {
+    if (previewBlocked()) return;
     sb.from("addons").update({ status: status }).eq("id", id).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast(status === "ordered" ? "Tillägg beställt — tack!" : "Tillägg avböjt.");
@@ -1231,7 +1265,7 @@
       .select("*" + (isAdmin ? ", owner:profiles!requests_user_id_fkey(full_name,email,company,website)" : ""))
       .order("created_at", { ascending: false });
     // Kundvyn visar bara egna ärenden — även för admin i "visa som kund"-läget
-    if (!isAdmin) q = q.eq("user_id", session.user.id);
+    if (!isAdmin) q = q.eq("user_id", cuid());
     q.then(function (res) {
       var box = document.getElementById("req-list");
       if (!box) return;
@@ -1278,6 +1312,7 @@
     document.getElementById("btn-back").addEventListener("click", renderCustomer);
     document.getElementById("form-req").addEventListener("submit", function (e) {
       e.preventDefault();
+      if (previewBlocked()) return;
       var btn = e.target.querySelector("button[type=submit]");
       btn.disabled = true;
       sb.from("requests").insert({
@@ -1452,6 +1487,7 @@
 
       document.getElementById("form-comment").addEventListener("submit", function (e) {
         e.preventDefault();
+        if (previewBlocked()) return;
         var body = document.getElementById("c-body").value.trim();
         if (!body) return;
         sb.from("request_comments").insert({ request_id: id, author_id: session.user.id, body: body }).then(function (res) {
@@ -1684,7 +1720,8 @@
         (siteUrl
           ? '<p><strong>Hemsida:</strong> <a href="' + esc(siteUrl) + '" target="_blank" rel="noopener">' + esc(site) + " &#8599;</a>" +
             (p.github_repo ? '  ·  <span class="muted">Repo: ' + esc(p.github_repo) + "</span>" : "") + "</p>"
-          : '<p class="muted">Ingen hemsida kopplad ännu.</p>') + "</div>" +
+          : '<p class="muted">Ingen hemsida kopplad ännu.</p>') +
+        '<p style="margin-top:.8rem"><button id="btn-preview-portal" class="btn btn-ghost btn-sm">👁 Förhandsvisa kundens portal</button></p>' + "</div>" +
         '<div class="card"><h2>Ärenden' + (newCount ? ' <span class="chip chip-new">' + newCount + " nya</span>" : "") + "</h2>" +
         (requests.length
           ? '<div class="req-list">' + requests.map(function (r) {
@@ -1754,6 +1791,12 @@
         '<div class="card"><h2>Tillägg för kunden</h2><div id="admin-addons">' + adminAddonList(addons) + "</div></div>";
 
       document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
+      document.getElementById("btn-preview-portal").addEventListener("click", function () {
+        previewUid = pid; previewProfile = p; viewAsCustomer = true;
+        var nav = document.getElementById("admin-nav"); if (nav) nav.hidden = true;
+        var vb = document.getElementById("btn-viewas"); if (vb) vb.textContent = "Tillbaka till admin";
+        renderCustomer();
+      });
       Array.prototype.forEach.call(document.querySelectorAll("[data-req]"), function (btn) {
         btn.addEventListener("click", function () { renderDetail(Number(btn.getAttribute("data-req")), true); });
       });
