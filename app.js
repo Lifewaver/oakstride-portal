@@ -1540,12 +1540,41 @@
           (b.wants_portal ? '<span class="chip chip-new">Portalansökan</span>' : "") + "</div>" +
           '<div class="detail-desc">' + esc(b.description) + "</div>" +
           (b.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(b.example_sites) + "</div>" : "") +
+          '<div style="margin-top:.9rem">' +
+          (b.status === "converted"
+            ? '<span class="chip">&#10003; Portal&#229;tkomst given</span>'
+            : '<button class="btn btn-primary btn-inline" data-invite="' + b.id + '" data-email="' + esc(b.email) + '" data-name="' + esc(b.name || "") + '" data-company="' + esc(b.company || "") + '">Ge portal&#229;tkomst</button>') +
+          "</div>" +
           "</div>";
       }).join("");
       Array.prototype.forEach.call(box.querySelectorAll("[data-bstatus]"), function (sel) {
         sel.addEventListener("change", function () {
           sb.from("project_briefs").update({ status: sel.value }).eq("id", Number(sel.getAttribute("data-bstatus"))).then(function (r) {
             if (r.error) toast("Kunde inte spara: " + r.error.message, true); else toast("Status uppdaterad.");
+          });
+        });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-invite]"), function (btn) {
+        btn.addEventListener("click", function () {
+          var email = btn.getAttribute("data-email");
+          if (!window.confirm("Ge " + email + " åtkomst till portalen?\n\nEn inbjudan mejlas och kontot aktiveras direkt.")) return;
+          var orig = btn.textContent;
+          btn.disabled = true; btn.textContent = "Bjuder in…";
+          sb.functions.invoke("invite-customer", {
+            body: {
+              email: email,
+              full_name: btn.getAttribute("data-name") || null,
+              company: btn.getAttribute("data-company") || null,
+              brief_id: Number(btn.getAttribute("data-invite"))
+            }
+          }).then(function (r) {
+            var d = (r && r.data) || {};
+            if (r && r.error) { toast("Kunde inte bjuda in: " + r.error.message, true); btn.disabled = false; btn.textContent = orig; return; }
+            if (!d.ok) { toast(d.error || "Något gick fel.", true); btn.disabled = false; btn.textContent = orig; return; }
+            toast(d.message || "Inbjudan skickad.");
+            renderAdminBriefs();
+          }, function (e) {
+            toast("Fel: " + ((e && e.message) || e), true); btn.disabled = false; btn.textContent = orig;
           });
         });
       });
