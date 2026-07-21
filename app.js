@@ -1641,21 +1641,6 @@
     }).join("");
   }
 
-  var SERVICE_KINDS = { doman: "Domän", epost: "E-post", hosting: "Hosting", betalvaxel: "Betalväxel", ovrigt: "Övrigt" };
-
-  function svcCost(s) {
-    if (s.cost == null || s.cost === "") return "";
-    var per = s.billing === "manad" ? "/mån" : (s.billing === "ar" ? "/år" : (s.billing === "engang" ? " (engång)" : ""));
-    return " · " + fmtKr(s.cost) + " kr" + per;
-  }
-  function servicesList(services) {
-    if (!services.length) return '<p class="muted">Inga tjänster registrerade ännu.</p>';
-    return services.map(function (s) {
-      return '<div class="addon"><div class="addon-main"><strong>' + esc(SERVICE_KINDS[s.kind] || s.kind) + ":</strong> " + esc(s.name) + esc(svcCost(s)) +
-        (s.detail ? '<div class="muted addon-desc">' + esc(s.detail) + "</div>" : "") + "</div>" +
-        '<button class="linklike" data-svcdel="' + s.id + '">Ta bort</button></div>';
-    }).join("");
-  }
 
   function renderAdminCustomerDetail(pid) {
     main.innerHTML = '<div class="spinner"></div>';
@@ -1666,7 +1651,6 @@
         sb.from("addons").select("*").eq("user_id", pid).order("created_at"),
         sb.from("onboarding_checkoffs").select("step_no, done_at, with_extras").eq("user_id", pid),
         sb.from("requests").select("id, title, status, created_at").eq("user_id", pid).order("created_at", { ascending: false }),
-        sb.from("customer_services").select("*").eq("user_id", pid).order("kind"),
         sb.from("project_briefs").select("description, example_sites, created_at").eq("email", p.email).order("created_at", { ascending: false }),
         sb.from("onboarding_content").select("step_no, body, link, transcript").eq("user_id", pid),
         sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid),
@@ -1675,15 +1659,15 @@
       ]).then(function (out) {
       var addons = out[0].data || [];
       var done = {}, doneExtras = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
-      var requests = out[2].data || [], services = out[3].data || [];
-      var briefs = out[4].error ? [] : (out[4].data || []);
+      var requests = out[2].data || [];
+      var briefs = out[3].error ? [] : (out[3].data || []);
       var brief = briefs[0] || null;
-      var content = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { content[r.step_no] = r; });
-      var notes = {}; (out[6].error ? [] : (out[6].data || [])).forEach(function (r) { notes[r.step_no] = r; });
-      var specs = out[7].error ? [] : (out[7].data || []);
+      var content = {}; (out[4].error ? [] : (out[4].data || [])).forEach(function (r) { content[r.step_no] = r; });
+      var notes = {}; (out[5].error ? [] : (out[5].data || [])).forEach(function (r) { notes[r.step_no] = r; });
+      var specs = out[6].error ? [] : (out[6].data || []);
       var latestSpec = specs[0] || null;
       var specData = latestSpec ? latestSpec.data : specFromBrief(brief);
-      var extraApprovals = out[8].error ? [] : (out[8].data || []);
+      var extraApprovals = out[7].error ? [] : (out[7].data || []);
       var latestExtraApproved = !!(latestSpec && extraApprovals.some(function (a) { return a.spec_version === latestSpec.version; }));
       var dm = specData.domain || {};
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
@@ -1714,17 +1698,6 @@
             '<div class="detail-desc">' + esc(brief.description) + "</div>" +
             (brief.example_sites ? '<p style="margin:.5rem 0 0"><strong>Exempelsajter:</strong></p><div class="detail-desc">' + esc(brief.example_sites) + "</div>" : "")
           : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>') + "</div>" +
-        '<div class="card"><h2>Tjänster — domän, e-post m.m.</h2>' +
-        '<div id="svc-list">' + servicesList(services) + "</div>" +
-        '<form id="form-svc" style="margin-top:1rem">' +
-        '<div class="addon-form-row">' +
-        '<div><label for="s-kind">Typ</label><select id="s-kind">' + Object.keys(SERVICE_KINDS).map(function (k) { return '<option value="' + k + '">' + SERVICE_KINDS[k] + "</option>"; }).join("") + "</select></div>" +
-        '<div style="flex:2"><label for="s-name">Namn/adress *</label><input type="text" id="s-name" required placeholder="t.ex. kundendomän.se eller Microsoft 365"></div>' +
-        "</div>" +
-        '<label for="s-detail">Detalj</label><input type="text" id="s-detail" placeholder="t.ex. leverantör, antal brevlådor, förnyelsedatum">' +
-        '<div class="addon-form-row"><div><label for="s-cost">Kostnad (kr)</label><input type="text" id="s-cost" placeholder="t.ex. 250"></div>' +
-        '<div><label for="s-billing">Period</label><select id="s-billing"><option value="">—</option><option value="ar">Per år</option><option value="manad">Per månad</option><option value="engang">Engång</option></select></div></div>' +
-        '<button type="submit" class="btn btn-primary btn-inline">Lägg till tjänst</button></form></div>' +
         '<div class="card"><h2>Uppstartssteg — kundens framsteg (' + doneCount + "/" + ONBOARDING_STEPS.length + ")</h2>" +
         '<ol class="onb-steps admin-steps">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, isDone = n === 1 ? step1Done : (n === 3 ? latestExtraApproved : !!done[n]);
@@ -1788,33 +1761,6 @@
         btn.addEventListener("click", function () {
           sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo"))).then(function (r) {
             if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
-          });
-        });
-      });
-      document.getElementById("form-svc").addEventListener("submit", function (e) {
-        e.preventDefault();
-        var name = document.getElementById("s-name").value.trim();
-        if (!name) { toast("Ange namn/adress.", true); return; }
-        var costRaw = document.getElementById("s-cost").value.replace(",", ".").replace(/\s/g, "");
-        var cost = costRaw ? parseFloat(costRaw) : null;
-        if (costRaw && isNaN(cost)) { toast("Ogiltig kostnad.", true); return; }
-        sb.from("customer_services").insert({
-          user_id: pid,
-          kind: document.getElementById("s-kind").value,
-          name: name,
-          detail: document.getElementById("s-detail").value.trim() || null,
-          cost: cost,
-          billing: document.getElementById("s-billing").value || null
-        }).then(function (r) {
-          if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
-          toast("Tjänst tillagd.");
-          renderAdminCustomerDetail(pid);
-        });
-      });
-      Array.prototype.forEach.call(document.querySelectorAll("[data-svcdel]"), function (btn) {
-        btn.addEventListener("click", function () {
-          sb.from("customer_services").delete().eq("id", Number(btn.getAttribute("data-svcdel"))).then(function (r) {
-            if (r.error) toast("Kunde inte ta bort: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
       });
