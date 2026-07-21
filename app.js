@@ -528,6 +528,7 @@
   // läser kundvyerna mot den kunden, och alla kundåtgärder blockeras.
   var previewUid = null;
   var previewProfile = null;
+  var previewWindow = false; // true när kundportalen förhandsvisas i ett eget fönster (?preview=)
   function cuid() { return previewUid || (session && session.user && session.user.id); }
   function cprofile() { return previewProfile || profile; }
   function previewBlocked() {
@@ -540,6 +541,18 @@
     var nav = document.getElementById("admin-nav"); if (nav) nav.hidden = !(profile && profile.is_admin);
     var vb = document.getElementById("btn-viewas"); if (vb) vb.textContent = "Visa som kund";
     if (pid) renderAdminCustomerDetail(pid); else renderAdmin();
+  }
+  // Förhandsvisning i eget fönster: laddad via ?preview=<uid>. Läser kundens profil (admin-RLS).
+  function enterPreviewWindow(pid) {
+    sb.from("profiles").select("*").eq("id", pid).maybeSingle().then(function (res) {
+      if (res.error || !res.data) { toast("Kunde inte hämta kunden för förhandsvisning.", true); renderAdmin(); return; }
+      previewUid = pid; previewProfile = res.data; viewAsCustomer = true; previewWindow = true;
+      var nav = document.getElementById("admin-nav"); if (nav) nav.hidden = true;
+      ["btn-viewas", "btn-account", "btn-passwd", "btn-logout"].forEach(function (id) {
+        var el = document.getElementById(id); if (el) el.hidden = true;
+      });
+      renderCustomer();
+    });
   }
 
   function show(name) {
@@ -633,7 +646,12 @@
       document.getElementById("btn-viewas").hidden = !profile.is_admin;
       show("app");
       // Admin (och admin i "visa som kund"-läge) visar admin/kundvy direkt.
-      if (profile.is_admin) { if (viewAsCustomer) renderCustomer(); else renderAdmin(); return; }
+      if (profile.is_admin) {
+        var pv = new URLSearchParams(location.search).get("preview");
+        if (pv) { enterPreviewWindow(pv); return; }
+        if (viewAsCustomer) renderCustomer(); else renderAdmin();
+        return;
+      }
       // Kunder släpps in direkt; villkoren godkänns inuti uppstartsflödet (se loadOnboarding).
       renderCustomer();
     });
@@ -889,7 +907,7 @@
       (previewUid
         ? '<div style="background:#1e3a2f;color:#fff;padding:.6rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-size:.92rem">' +
           '<span>👁 Förhandsvisar <strong>' + esc(cp.full_name || cp.email) + '</strong>s portal — skrivskyddat</span>' +
-          '<button id="btn-preview-exit" class="btn btn-ghost btn-sm" style="margin-left:auto;background:#fff">Avsluta förhandsvisning</button></div>'
+          '<button id="btn-preview-exit" class="btn btn-ghost btn-sm" style="margin-left:auto;background:#fff">' + (previewWindow ? "Stäng" : "Avsluta förhandsvisning") + "</button></div>"
         : "") +
       '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
       '<div id="onboarding-box"></div>' +
@@ -914,7 +932,7 @@
     document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
     if (previewUid) {
       var pe = document.getElementById("btn-preview-exit");
-      if (pe) pe.addEventListener("click", exitPreview);
+      if (pe) pe.addEventListener("click", function () { if (previewWindow) window.close(); else exitPreview(); });
     }
     loadRequests(false);
     loadStats(site);
@@ -1792,10 +1810,7 @@
 
       document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
       document.getElementById("btn-preview-portal").addEventListener("click", function () {
-        previewUid = pid; previewProfile = p; viewAsCustomer = true;
-        var nav = document.getElementById("admin-nav"); if (nav) nav.hidden = true;
-        var vb = document.getElementById("btn-viewas"); if (vb) vb.textContent = "Tillbaka till admin";
-        renderCustomer();
+        window.open(location.origin + location.pathname + "?preview=" + encodeURIComponent(pid), "_blank");
       });
       Array.prototype.forEach.call(document.querySelectorAll("[data-req]"), function (btn) {
         btn.addEventListener("click", function () { renderDetail(Number(btn.getAttribute("data-req")), true); });
