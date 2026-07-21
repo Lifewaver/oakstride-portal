@@ -1002,7 +1002,7 @@
         if (n === 1) return !!brief;
         if (n === 2) return !!(cp.meeting_at || done[2]);
         if (n === 3) return !!(spec && hasApprovedOffer && hasAcceptedTerms && billingComplete);
-        if (n === 4) return !!(done[4] && offerCurrentApproved);
+        if (n === 4) return utkastReady();
         if (n === 5) return !!cp.launched_at;
         return !!done[n];
       }
@@ -1087,27 +1087,13 @@
 
           if (s.site) {
             if (!utkastReady()) {
-              body += '<p class="muted">Sidan och konfigurationen byggs av OakStride. Du får ett mejl när det är dags att granska och godkänna.</p>';
+              body += '<p class="muted">Sidan och konfigurationen byggs av OakStride. Du får ett mejl när det är dags att granska.</p>';
             } else {
               var c5 = content[5];
               if (c5.body) body += '<div class="onb-content-block">' + esc(c5.body).replace(/\n/g, "<br>") + "</div>";
               if (c5.link) { var u = /^https?:\/\//.test(c5.link) ? c5.link : "https://" + c5.link; body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(u) + '" target="_blank" rel="noopener">Öppna sidan &#8599;</a></p>'; }
-              if (dn) {
-                body += '<p class="onb-verified">✓ Sida & konfiguration godkänd ' + fmtDate(done[4]) + " (offert v" + spec.version + ").</p>";
-              } else if (cur) {
-                body += '<p class="muted">Granska sidan nedan. Önskar du ändringar? Skicka in dem här — vi bygger in dem och du godkänner sedan.</p>' +
-                  proposalsHtml(proposals) +
-                  '<div class="onb-offer4"><h4>Kravspecifikation & offert (version ' + spec.version + ")</h4>" +
-                  '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm js-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button></div>' +
-                  (offerCurrentApproved
-                    ? '<p class="onb-verified">✓ Du har godkänt den här versionen av offerten.</p>'
-                    : '<label class="onb-confirm"><input type="checkbox" data-approve-offer4="' + spec.version + '"> <span>Jag godkänner den uppdaterade kravspecifikationen och offerten (v' + spec.version + ")</span></label>") +
-                  "</div>" +
-                  '<label class="onb-confirm"><input type="checkbox" data-step="4"' + (offerCurrentApproved ? "" : " disabled") + "> <span>Jag godkänner sidan och konfigurationen</span></label>" +
-                  (offerCurrentApproved ? "" : '<p class="muted onb-hint-sm">Godkänn den uppdaterade offerten ovan först.</p>');
-              } else {
-                body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
-              }
+              body += '<p class="muted">Granska sidan. Önskar du ändringar? Skicka in dem här — vi bygger in dem. Slutgodkännandet gör du i steg 5.</p>' +
+                proposalsHtml(proposals);
             }
           }
 
@@ -1122,8 +1108,21 @@
             if (cp.launched_at) {
               body += '<p class="onb-verified">🎉 Lanserad ' + fmtDate(cp.launched_at) + "</p>";
               if (cp.launch_url) { var lu = /^https?:\/\//.test(cp.launch_url) ? cp.launch_url : "https://" + cp.launch_url; body += '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(lu) + '" target="_blank" rel="noopener">Öppna din sida &#8599;</a></p>'; }
-            } else if (cur) body += '<p class="muted">Vi lanserar sidan på din domän inom kort — du får ett mejl när den är live.</p>';
-            else body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
+            } else if (cur) {
+              var c5b = content[5] || {};
+              if (c5b.link) { var u5 = /^https?:\/\//.test(c5b.link) ? c5b.link : "https://" + c5b.link; body += '<p><a class="btn btn-ghost btn-sm btn-inline" href="' + esc(u5) + '" target="_blank" rel="noopener">Öppna den färdiga sidan &#8599;</a></p>'; }
+              if (spec && !offerCurrentApproved) {
+                body += '<div class="onb-offer4"><h4>Uppdaterad kravspecifikation &amp; offert (v' + spec.version + ")</h4>" +
+                  '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm js-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button></div>' +
+                  '<label class="onb-confirm"><input type="checkbox" data-approve-offer4="' + spec.version + '"> <span>Jag godkänner den uppdaterade kravspecifikationen och offerten (v' + spec.version + ")</span></label></div>";
+              }
+              if (done[5]) {
+                body += '<p class="onb-verified">✓ Du har godkänt sidan — vi lanserar den inom kort och meddelar dig.</p>';
+              } else {
+                body += '<label class="onb-confirm"><input type="checkbox" data-step="5"' + ((spec && !offerCurrentApproved) ? " disabled" : "") + "> <span>Jag godkänner den färdiga sidan för lansering</span></label>" +
+                  ((spec && !offerCurrentApproved) ? '<p class="muted onb-hint-sm">Godkänn den uppdaterade offerten ovan först.</p>' : "");
+              }
+            } else body += '<p class="muted">Blir aktivt när föregående steg är klart.</p>';
           }
 
           return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + ">" +
@@ -1777,7 +1776,8 @@
       var siteUrl = site ? "https://" + site : null;
 
       var proposals = out[8] && !out[8].error ? (out[8].data || []) : [];
-      var mDone = { 1: step1Done, 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved, 4: !!done[4], 5: !!p.launched_at };
+      var utkastReadyA = !!(content[5] && (content[5].link || content[5].body));
+      var mDone = { 1: step1Done, 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved, 4: utkastReadyA, 5: !!p.launched_at };
       var mCurrent = 0; for (var mk = 1; mk <= ONBOARDING_STEPS.length; mk++) { if (!mDone[mk]) { mCurrent = mk; break; } }
       function propThread(list) {
         return list.length
@@ -1829,7 +1829,7 @@
           '<label for="adm-draft-note">Kommentar till kunden (valfri)</label>' +
           '<textarea id="adm-draft-note" rows="2" placeholder="Vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
           '<button class="btn btn-primary btn-inline" data-send-draft="1">Skicka utkast</button>' +
-          (done[4] ? '<p class="onb-verified" style="margin-top:.6rem">✓ Kunden godkände sidan ' + fmtDate(done[4]) + ' <button class="linklike" data-undo="4">Ångra</button></p>' : '<p class="status-note" style="margin-top:.6rem">Väntar på kundens godkännande av sidan.</p>') +
+          (utkastReadyA ? '<p class="onb-verified" style="margin-top:.6rem">✓ Utkast skickat — kunden granskar på steg 4 (godkänner på steg 5)</p>' : '<p class="status-note" style="margin-top:.6rem">Skicka ett utkast så kunden kan granska.</p>') +
           '<hr style="margin:1.2rem 0;border:0;border-top:1px solid #e2e6e2"><h3 style="margin:.4rem 0">Ändringsförslag</h3>' +
           '<p class="muted onb-hint-sm">Kundens önskemål och dina förslag — kunden ser tråden på steg 4.</p>' +
           propThread(proposals) +
@@ -1839,7 +1839,9 @@
           ? '<p class="onb-verified">🎉 Lanserad ' + fmtDate(p.launched_at) + "</p>" +
             (p.launch_url ? '<p><a class="btn btn-primary btn-sm btn-inline" href="' + esc(/^https?:\/\//.test(p.launch_url) ? p.launch_url : "https://" + p.launch_url) + '" target="_blank" rel="noopener">Öppna sidan &#8599;</a></p>' : "") +
             '<button class="btn btn-ghost btn-sm" data-unlaunch="1">Ångra lansering</button>'
-          : '<label for="adm-launch-url">Länk till den färdiga sidan</label>' +
+          : (done[5] ? '<p class="onb-verified">✓ Kunden har godkänt den färdiga sidan ' + fmtDate(done[5]) + "</p>" : '<p class="status-note">Väntar på kundens slutgodkännande av sidan (steg 5).</p>') +
+            (latestExtraApproved ? "" : '<p class="status-note">Kunden har inte godkänt aktuell kravspec/offert ännu.</p>') +
+            '<label for="adm-launch-url">Länk till den färdiga sidan</label>' +
             '<input type="text" id="adm-launch-url" value="' + esc(p.launch_url || "") + '" placeholder="https://kundendoman.se">' +
             '<button class="btn btn-primary btn-inline" data-launch="1">Markera som lanserad</button>';
         return "";
