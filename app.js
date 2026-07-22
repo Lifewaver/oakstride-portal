@@ -1719,7 +1719,7 @@
         var sv = latestSpec[p.id];
         return journeyTurn({ launched_at: p.launched_at, brief: !!briefEmails[(p.email || "").toLowerCase()], meeting_at: p.meeting_at, specVer: sv || null, offerApproved: !!(sv && approvals[p.id] && approvals[p.id][sv]), draftLink: !!draft[p.id], siteApproved: !!siteApp[p.id] });
       }
-      box.innerHTML = '<table class="table"><thead><tr><th>Kund</th><th>Hemsida</th><th>GitHub-repo</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
+      box.innerHTML = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="table"><thead><tr><th>Kund</th><th>Hemsida</th><th>GitHub-repo</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
         rows.map(function (p) {
           return "<tr data-id='" + esc(p.id) + "'>" +
             "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
@@ -1731,7 +1731,7 @@
             "<td>" + fmtDate(p.created_at) + "</td>" +
             '<td><button class="btn btn-sm btn-inline ' + (p.approved ? "btn-google" : "btn-primary") + ' btn-approve">' +
             (p.approved ? "Stäng av" : "Godkänn") + "</button></td></tr>";
-        }).join("") + "</tbody></table>";
+        }).join("") + "</tbody></table></div>";
       Array.prototype.forEach.call(box.querySelectorAll("tr[data-id]"), function (tr) {
         var pid = tr.getAttribute("data-id");
         var current = rows.find(function (p) { return p.id === pid; });

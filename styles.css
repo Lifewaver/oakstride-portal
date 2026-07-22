@@ -211,9 +211,18 @@ form .btn{margin-top:1rem}
 .toast.error{background:var(--danger)}
 
 @media (max-width:600px){
-  .topbar{padding:.75rem 1rem}
+  .topbar{padding:.7rem 1rem}
   .container{padding:1.25rem 1rem 3rem}
   .card{padding:1.4rem}
+  /* Topbar: låt e-post + knappar radbryta snyggt i stället för att spilla över */
+  .user-box{flex-wrap:wrap;justify-content:flex-end;gap:.35rem .5rem;width:100%}
+  .user-email{width:100%;text-align:right;margin-bottom:.15rem}
+  .tabs{flex-wrap:wrap;justify-content:center}
+  /* Accordion: mindre vänsterindrag på smal skärm */
+  .onb-acc-body{padding:.2rem .9rem 1rem .9rem}
+  .onb-acc-sum{padding:.85rem .7rem}
+  /* Kunder-tabell: visa bara Kund, Hemsida, Status (dölj repo + registrerad) */
+  .table th:nth-child(3),.table td:nth-child(3),
   .table th:nth-child(4),.table td:nth-child(4){display:none}
 }
 
