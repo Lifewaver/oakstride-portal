@@ -1847,6 +1847,8 @@
           : '<p class="muted">Ingen projektförfrågan kopplad till denna e-post.</p>';
         if (n === 2) return '<label for="adm-meeting">Datum för uppstartsmötet (visas för kunden)</label>' +
           '<input type="date" id="adm-meeting" value="' + esc(p.meeting_at || "") + '">' +
+          '<div style="margin:.5rem 0 1.1rem"><button class="btn btn-primary btn-inline" data-send-meeting="1">📅 Skicka datum till kund</button>' +
+          (p.meeting_at ? ' <span class="muted onb-hint-sm">Kunden ser ' + esc(p.meeting_at) + ' i sin portal.</span>' : ' <span class="muted onb-hint-sm">Sparar datumet, visar det i kundens portal och mejlar kunden.</span>') + "</div>" +
           '<label for="adm-c3">Sammanfattning av mötet (visas för kunden)</label>' +
           '<textarea id="adm-c3" rows="4" placeholder="Kort recap av mötet...">' + esc(content[3] ? (content[3].body || "") : "") + "</textarea>" +
           '<label for="adm-c3trans">Transkribering (internt — visas ej för kunden)</label>' +
@@ -1930,6 +1932,16 @@
           sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo"))).then(function (r) {
             if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
+        });
+      });
+      var sendMeeting = document.querySelector("[data-send-meeting]");
+      if (sendMeeting) sendMeeting.addEventListener("click", function () {
+        var md = document.getElementById("adm-meeting").value || null;
+        if (!md) { toast("Välj ett datum först.", true); return; }
+        sb.from("profiles").update({ meeting_at: md }).eq("id", pid).then(function (r) {
+          if (r.error) { toast("Kunde inte skicka: " + r.error.message, true); return; }
+          toast("Datum skickat till kund — de ser det i portalen och får ett mejl.");
+          renderAdminCustomerDetail(pid);
         });
       });
       var saveStep2 = document.querySelector("[data-save-step2]");
