@@ -87,6 +87,10 @@ form .btn{margin-top:1rem}
 .topbar .brand{margin-bottom:0}
 .user-box{display:flex;align-items:center;gap:.75rem}
 .user-email{font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:#5b635a}
+/* Hamburgare (visas bara på mobil via media query nedan) */
+.btn-menu{display:none;background:transparent;border:none;font-size:1.6rem;line-height:1;color:var(--pine);cursor:pointer;padding:.1rem .45rem;border-radius:8px}
+.btn-menu:hover{background:var(--birch)}
+.topbar-drawer{display:contents}
 
 .tabs{display:flex;gap:.25rem;background:var(--birch);border-radius:999px;padding:.25rem}
 .tab{
@@ -214,13 +218,22 @@ form .btn{margin-top:1rem}
   .topbar{padding:.7rem 1rem}
   .container{padding:1.25rem 1rem 3rem}
   .card{padding:1.4rem}
-  /* Topbar: låt e-post + knappar radbryta snyggt i stället för att spilla över */
-  .user-box{flex-wrap:wrap;justify-content:flex-end;gap:.35rem .5rem;width:100%}
-  .user-email{width:100%;text-align:right;margin-bottom:.15rem}
-  .tabs{flex-wrap:wrap;justify-content:center}
-  /* Accordion: mindre vänsterindrag på smal skärm */
+  /* Hamburgarmeny: fäll ihop flikar + användaråtgärder i en dropdown */
+  .btn-menu{display:inline-flex;align-items:center;justify-content:center}
+  .topbar-drawer{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border-bottom:1px solid var(--line);box-shadow:0 10px 22px rgba(20,40,30,.12);flex-direction:column;align-items:stretch;gap:.3rem;padding:.7rem 1rem 1rem;z-index:30}
+  .topbar.nav-open .topbar-drawer{display:flex}
+  .topbar-drawer .tabs{flex-direction:column;background:transparent;padding:0;gap:.1rem}
+  .topbar-drawer .tab{text-align:left;padding:.6rem .8rem;border-radius:8px}
+  .topbar-drawer .tab.active{background:var(--pine);color:#fff}
+  .topbar-drawer .user-box{flex-direction:column;align-items:stretch;gap:.15rem;border-top:1px solid var(--line);margin-top:.25rem;padding-top:.5rem}
+  .topbar-drawer .user-email{width:auto;text-align:left;padding:.15rem .8rem .3rem}
+  .topbar-drawer .user-box .btn{justify-content:flex-start;text-align:left;padding:.55rem .8rem}
+  /* Accordion: mindre vänsterindrag + bryt långa titlar på smal skärm */
   .onb-acc-body{padding:.2rem .9rem 1rem .9rem}
   .onb-acc-sum{padding:.85rem .7rem}
+  .onb-acc-title{overflow-wrap:anywhere}
+  /* Textboxar: bryt långa ord/länkar i stället för att spilla ut ur boxen */
+  .detail-desc,.onb-content-block{overflow-wrap:anywhere}
   /* Kunder-tabell: visa bara Kund, Hemsida, Status (dölj repo + registrerad) */
   .table th:nth-child(3),.table td:nth-child(3),
   .table th:nth-child(4),.table td:nth-child(4){display:none}

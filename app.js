@@ -894,6 +894,21 @@
   document.getElementById("btn-logout-pending").addEventListener("click", signOut);
   function signOut() { sb.auth.signOut().then(function () { window.location.reload(); }); }
 
+  // Hamburgarmeny (mobil): öppna/stäng dropdown, stäng när man väljer något
+  (function () {
+    var btnMenu = document.getElementById("btn-menu");
+    var topbar = document.querySelector(".topbar");
+    var drawer = document.getElementById("topbar-drawer");
+    if (!btnMenu || !topbar) return;
+    btnMenu.addEventListener("click", function () {
+      var open = topbar.classList.toggle("nav-open");
+      btnMenu.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    if (drawer) drawer.addEventListener("click", function (e) {
+      if (e.target.closest("button")) { topbar.classList.remove("nav-open"); btnMenu.setAttribute("aria-expanded", "false"); }
+    });
+  })();
+
   // ---------- Väntar på godkännande ----------
 
   document.getElementById("btn-pending-save").addEventListener("click", function () {

@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=48">
+<link rel="stylesheet" href="styles.css?v=49">
 </head>
 <body>
 
@@ -94,18 +94,21 @@
 <div id="view-app" class="view" hidden>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">OakStride</span> <span class="brand-sub">Portal</span></div>
-    <nav id="admin-nav" class="tabs" hidden>
-      <button class="tab active" data-tab="arenden">Ärenden</button>
-      <button class="tab" data-tab="kunder">Kunder</button>
-      <button class="tab" data-tab="briefs">Förfrågningar</button>
-      <button class="tab" data-tab="priser">Priser</button>
-    </nav>
-    <div class="user-box">
-      <span id="user-email" class="user-email"></span>
-      <button id="btn-viewas" class="btn btn-ghost btn-sm" hidden>Visa som kund</button>
-      <button id="btn-account" class="btn btn-ghost btn-sm">Mina uppgifter</button>
-      <button id="btn-passwd" class="btn btn-ghost btn-sm">Lösenord</button>
-      <button id="btn-logout" class="btn btn-ghost btn-sm">Logga ut</button>
+    <button id="btn-menu" class="btn-menu" aria-label="Meny" aria-expanded="false">☰</button>
+    <div class="topbar-drawer" id="topbar-drawer">
+      <nav id="admin-nav" class="tabs" hidden>
+        <button class="tab active" data-tab="arenden">Ärenden</button>
+        <button class="tab" data-tab="kunder">Kunder</button>
+        <button class="tab" data-tab="briefs">Förfrågningar</button>
+        <button class="tab" data-tab="priser">Priser</button>
+      </nav>
+      <div class="user-box">
+        <span id="user-email" class="user-email"></span>
+        <button id="btn-viewas" class="btn btn-ghost btn-sm" hidden>Visa som kund</button>
+        <button id="btn-account" class="btn btn-ghost btn-sm">Mina uppgifter</button>
+        <button id="btn-passwd" class="btn btn-ghost btn-sm">Lösenord</button>
+        <button id="btn-logout" class="btn btn-ghost btn-sm">Logga ut</button>
+      </div>
     </div>
   </header>
   <main id="app-main" class="container"></main>
@@ -115,7 +118,7 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=48"></script>
-<script src="app.js?v=48"></script>
+<script src="config.js?v=49"></script>
+<script src="app.js?v=49"></script>
 </body>
 </html>
