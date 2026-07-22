@@ -173,8 +173,8 @@
     { title: "Projektförfrågan", desc: "Du fyller i vår projektförfrågan med din verksamhet, dina mål och exempel på sajter du gillar. Det är starten på resan.", form: true },
     { title: "Uppstartsmöte", desc: "Vi bokar och håller ett uppstartsmöte där vi går igenom din verksamhet, dina mål, din målgrupp och vad sidan ska göra.", cta: "Uppstartsmötet är genomfört" },
     { title: "Godkänn kravspecifikation & offert", desc: "Här godkänner du kravspecifikationen och offerten (i panelen längre ned) samt våra villkor, och lämnar faktureringsuppgifter. Vill du ändra något — skicka en kommentar först, så uppdaterar vi och du godkänner sedan.", offer: true },
-    { title: "Godkänn sida & konfiguration", desc: "Vi bygger sidan och sätter upp konfigurationen. Granska och godkänn. Kommer du på något extra kan du skicka in det — då uppdaterar vi kravspecen/offerten och du godkänner den igen.", site: true },
-    { title: "Lansering", desc: "Vi lanserar sidan på din domän och lämnar över till löpande drift. Allt är klart — grattis, nu är ni live!", cta: "Bekräfta lansering" }
+    { title: "Granska sida & konfiguration", desc: "Vi bygger sidan och sätter upp konfigurationen. Granska den och skicka in eventuella ändringsönskemål — vi bygger in dem. Slutgodkännandet gör du i steg 5.", site: true },
+    { title: "Godkänn & lansera", desc: "Godkänn den färdiga sidan (och ev. uppdaterad offert). Sedan lanserar vi på din domän och lämnar över till löpande drift — grattis, nu är ni live!", cta: "Bekräfta lansering" }
   ];
 
   function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
@@ -1690,7 +1690,7 @@
           return "<tr data-id='" + esc(p.id) + "'>" +
             "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
             (p.company ? "<br>" + esc(p.company) : "") +
-            "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Uppstart &amp; tillägg &rarr;</button></td>" +
+            "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Öppna kundens resa &rarr;</button></td>" +
             '<td><input type="text" class="inp-site" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></td>' +
             '<td><input type="text" class="inp-repo" value="' + esc(p.github_repo || "") + '" placeholder="ägare/repo"></td>' +
             "<td>" + fmtDate(p.created_at) + "</td>" +
