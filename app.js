@@ -180,6 +180,23 @@
   function fmtKr(n) { return Number(n).toLocaleString("sv-SE"); }
   function addonPrice(a) { return fmtKr(a.price) + " kr" + (a.billing === "manad" ? "/mån" : " (engång)"); }
 
+  // Vems tur är det i kundens resa? Gemensam status-logik för admin-vyerna.
+  function journeyTurn(j) {
+    if (j.launched_at) return { turn: "done", label: "Lanserad", step: 5 };
+    if (!j.brief) return { turn: "customer", label: "väntar på förfrågan", step: 1 };
+    if (!j.meeting_at) return { turn: "admin", label: "registrera uppstartsmöte", step: 2 };
+    if (!j.specVer) return { turn: "admin", label: "skapa kravspec & offert", step: 3 };
+    if (!j.offerApproved) return { turn: "customer", label: "godkänna offert", step: 3 };
+    if (!j.draftLink) return { turn: "admin", label: "skicka utkast", step: 4 };
+    if (!j.siteApproved) return { turn: "customer", label: "godkänna sidan", step: 5 };
+    return { turn: "admin", label: "markera som lanserad", step: 5 };
+  }
+  function turnChip(t) {
+    if (t.turn === "done") return '<span class="chip" style="background:#dcefe4;color:#1e7a4b">✓ Lanserad</span>';
+    if (t.turn === "admin") return '<span class="chip" style="background:#fce7d6;color:#8a4b1e">🟠 Din tur — ' + esc(t.label) + "</span>";
+    return '<span class="chip" style="background:#e6ecfa;color:#2d46c4">⏳ Väntar på kund — ' + esc(t.label) + "</span>";
+  }
+
   // ---------- Kravspecifikation (standardformat, versionerad) ----------
 
   var SPEC_SECTIONS = [
@@ -1016,7 +1033,7 @@
             }).join("")
           : '<p class="muted onb-hint-sm">Inga ändringsförslag ännu.</p>';
         return '<div class="onb-content-block"><strong>Önskemål om ändringar</strong>' +
-          '<p class="muted onb-hint-sm">Skriv vad du vill ändra på sidan — vi ser det direkt, och våra förslag dyker upp här.</p>' +
+          '<p class="muted onb-hint-sm">Justeringar på den byggda sidan innan lansering — vi ser dem direkt och bygger in dem, och våra förslag dyker upp här.</p>' +
           thread +
           '<textarea id="prop-text" rows="3" placeholder="Beskriv en ändring du vill ha..."></textarea>' +
           '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-prop="1">Skicka förslag</button></div></div>';
@@ -1028,11 +1045,11 @@
       function clarFormHtml() {
         var pages = (((spec.data || {}).sections || {}).sidor || []).map(function (i) { return i.text; });
         var opts = '<option value="Hela siten">Hela siten</option>' + pages.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + "</option>"; }).join("");
-        return '<div class="onb-clar"><label for="clar-scope">Skicka en kommentar eller ändring</label>' +
+        return '<div class="onb-clar"><label for="clar-scope">Vill du ändra <strong>vad som ska ingå</strong>?</label>' +
           '<div class="onb-clar-row"><span class="onb-clar-lbl">Gäller:</span><select id="clar-scope">' + opts + "</select></div>" +
           '<textarea id="clar-text" rows="3" placeholder="Beskriv vad du vill ändra eller lägga till..."></textarea>' +
           '<div class="onb-note-row"><button class="btn btn-ghost btn-sm" data-clar="1">Skicka</button>' +
-          '<span class="muted onb-clar-hint">Dokumenteras i kravspecen som en ny version — du godkänner sedan den uppdaterade offerten.</span></div></div>';
+          '<span class="muted onb-clar-hint">Detta påverkar kravspecen &amp; offerten — vi uppdaterar dem och du godkänner den nya offerten innan vi bygger.</span></div></div>';
       }
       function billingFormHtml(b) {
         b = b || {};
@@ -1112,7 +1129,8 @@
               var c5b = content[5] || {};
               if (c5b.link) { var u5 = /^https?:\/\//.test(c5b.link) ? c5b.link : "https://" + c5b.link; body += '<p><a class="btn btn-ghost btn-sm btn-inline" href="' + esc(u5) + '" target="_blank" rel="noopener">Öppna den färdiga sidan &#8599;</a></p>'; }
               if (spec && !offerCurrentApproved) {
-                body += '<div class="onb-offer4"><h4>Uppdaterad kravspecifikation &amp; offert (v' + spec.version + ")</h4>" +
+                body += '<p class="muted">Vi har uppdaterat kravspecifikationen &amp; offerten utifrån dina önskemål. Godkänn den nya versionen innan lansering:</p>' +
+                  '<div class="onb-offer4"><h4>Uppdaterad kravspecifikation &amp; offert (v' + spec.version + ")</h4>" +
                   '<div class="onb-docs"><button type="button" class="btn btn-ghost btn-sm js-open-spec">Öppna kravspecifikation &amp; offert &#8599;</button></div>' +
                   '<label class="onb-confirm"><input type="checkbox" data-approve-offer4="' + spec.version + '"> <span>Jag godkänner den uppdaterade kravspecifikationen och offerten (v' + spec.version + ")</span></label></div>";
               }
@@ -1679,18 +1697,35 @@
   }
 
   function renderAdminCustomers() {
-    main.innerHTML = '<h1>Kunder</h1><p class="muted">Godkänn nya konton och koppla dem till rätt hemsida.</p><div id="cust-box"><div class="spinner"></div></div>';
-    sb.from("profiles").select("*").order("created_at", { ascending: false }).then(function (res) {
+    main.innerHTML = '<h1>Kunder</h1><p class="muted">Godkänn konton, koppla hemsida och se vems tur det är i varje kunds resa.</p><div id="cust-box"><div class="spinner"></div></div>';
+    Promise.all([
+      sb.from("profiles").select("*").order("created_at", { ascending: false }),
+      sb.from("project_briefs").select("email"),
+      sb.from("requirement_specs").select("user_id, version"),
+      sb.from("extra_work_approvals").select("user_id, spec_version"),
+      sb.from("onboarding_content").select("user_id, link").eq("step_no", 5),
+      sb.from("onboarding_checkoffs").select("user_id").eq("step_no", 5)
+    ]).then(function (out) {
       var box = document.getElementById("cust-box");
-      if (res.error) { box.innerHTML = '<div class="empty">' + esc(res.error.message) + "</div>"; return; }
-      var rows = (res.data || []).filter(function (p) { return !p.is_admin; });
+      if (out[0].error) { box.innerHTML = '<div class="empty">' + esc(out[0].error.message) + "</div>"; return; }
+      var rows = (out[0].data || []).filter(function (p) { return !p.is_admin; });
       if (!rows.length) { box.innerHTML = '<div class="empty">Inga kundkonton ännu.</div>'; return; }
+      var briefEmails = {}; (out[1].data || []).forEach(function (b) { briefEmails[(b.email || "").toLowerCase()] = true; });
+      var latestSpec = {}; (out[2].data || []).forEach(function (s) { if (!(s.user_id in latestSpec) || s.version > latestSpec[s.user_id]) latestSpec[s.user_id] = s.version; });
+      var approvals = {}; (out[3].data || []).forEach(function (a) { (approvals[a.user_id] = approvals[a.user_id] || {})[a.spec_version] = true; });
+      var draft = {}; (out[4].data || []).forEach(function (c) { if (c.link) draft[c.user_id] = true; });
+      var siteApp = {}; (out[5].data || []).forEach(function (c) { siteApp[c.user_id] = true; });
+      function statusFor(p) {
+        var sv = latestSpec[p.id];
+        return journeyTurn({ launched_at: p.launched_at, brief: !!briefEmails[(p.email || "").toLowerCase()], meeting_at: p.meeting_at, specVer: sv || null, offerApproved: !!(sv && approvals[p.id] && approvals[p.id][sv]), draftLink: !!draft[p.id], siteApproved: !!siteApp[p.id] });
+      }
       box.innerHTML = '<table class="table"><thead><tr><th>Kund</th><th>Hemsida</th><th>GitHub-repo</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
         rows.map(function (p) {
           return "<tr data-id='" + esc(p.id) + "'>" +
             "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
             (p.company ? "<br>" + esc(p.company) : "") +
-            "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Öppna kundens resa &rarr;</button></td>" +
+            "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Öppna kundens resa &rarr;</button>" +
+            "<br><span style='display:inline-block;margin-top:.35rem'>" + turnChip(statusFor(p)) + "</span></td>" +
             '<td><input type="text" class="inp-site" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></td>' +
             '<td><input type="text" class="inp-repo" value="' + esc(p.github_repo || "") + '" placeholder="ägare/repo"></td>' +
             "<td>" + fmtDate(p.created_at) + "</td>" +
@@ -1779,6 +1814,7 @@
       var utkastReadyA = !!(content[5] && (content[5].link || content[5].body));
       var mDone = { 1: step1Done, 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved, 4: utkastReadyA, 5: !!p.launched_at };
       var mCurrent = 0; for (var mk = 1; mk <= ONBOARDING_STEPS.length; mk++) { if (!mDone[mk]) { mCurrent = mk; break; } }
+      var jt = journeyTurn({ launched_at: p.launched_at, brief: !!brief, meeting_at: p.meeting_at, specVer: latestSpec ? latestSpec.version : null, offerApproved: latestExtraApproved, draftLink: !!(content[5] && content[5].link), siteApproved: !!done[5] });
       function propThread(list) {
         return list.length
           ? list.map(function (pr) {
@@ -1852,11 +1888,12 @@
         '<div class="card"><h1>' + esc(p.full_name || p.email) + "s resa mot en ny sida</h1>" +
         '<p class="muted">' + esc(p.email) + (p.company ? " · " + esc(p.company) : "") + "</p>" +
         (siteUrl ? '<p><strong>Hemsida:</strong> <a href="' + esc(siteUrl) + '" target="_blank" rel="noopener">' + esc(site) + " &#8599;</a>" + (p.github_repo ? '  ·  <span class="muted">Repo: ' + esc(p.github_repo) + "</span>" : "") + "</p>" : "") +
-        '<p style="margin-top:.6rem"><button id="btn-preview-portal" class="btn btn-ghost btn-sm">👁 Förhandsvisa kundens portal</button></p>' + "</div>" +
+        '<p style="margin-top:.6rem"><button id="btn-preview-portal" class="btn btn-ghost btn-sm">👁 Förhandsvisa kundens portal</button></p>' +
+        '<p style="margin-top:.5rem">' + turnChip(jt) + "</p>" + "</div>" +
         '<div class="card onb-card"><div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, dn = mDone[n], cur = n === mCurrent;
           var cls = dn ? "done" : (cur ? "current" : "upcoming");
-          var meta = dn ? '<span class="onb-acc-meta">✓ klart</span>' : (cur ? '<span class="onb-acc-meta">Pågår</span>' : "");
+          var meta = dn ? '<span class="onb-acc-meta">✓ klart</span>' : (cur ? '<span class="onb-acc-meta" style="color:' + (jt.turn === "admin" ? "#8a4b1e" : "#2d46c4") + '">' + (jt.turn === "admin" ? "🟠 Din tur" : "⏳ Väntar på kund") + "</span>" : "");
           return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + '><summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + '</span><span class="onb-acc-title">' + esc(s.title) + "</span>" + meta + '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary><div class="onb-acc-body">' + stepBody(n) + "</div></details>";
         }).join("") + "</div></div>" +
         '<div class="card"><h2>Ärenden' + (newCount ? ' <span class="chip chip-new">' + newCount + " nya</span>" : "") + "</h2>" +
@@ -1914,6 +1951,7 @@
       });
       var launchBtn = document.querySelector("[data-launch]");
       if (launchBtn) launchBtn.addEventListener("click", function () {
+        if (!done[5] && !window.confirm("Kunden har inte godkänt den färdiga sidan än (steg 5). Vill du lansera ändå?")) return;
         sb.from("profiles").update({ launched_at: new Date().toISOString(), launch_url: document.getElementById("adm-launch-url").value.trim() || null }).eq("id", pid).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Markerad som lanserad — kunden ser det nu."); renderAdminCustomerDetail(pid);
