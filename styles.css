@@ -407,3 +407,8 @@ form .btn{margin-top:1rem}
 .addon-form-row>div{flex:1;min-width:140px}
 
 .onb-admin-mark{margin-top:.9rem;padding-top:.7rem;border-top:1px dashed #d5dbd5;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.onb-master>.onb-master-sum{display:flex;align-items:center;gap:.7rem;cursor:pointer;list-style:none;margin:0}
+.onb-master>.onb-master-sum::-webkit-details-marker{display:none}
+.onb-master>.onb-master-sum h2{margin:0;flex:1}
+.onb-master[open]>.onb-master-sum{margin-bottom:.3rem}
+.onb-master[open]>.onb-master-sum .onb-acc-chev{transform:rotate(180deg)}

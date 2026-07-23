@@ -541,6 +541,7 @@
   var profile = null;
   var adminTab = "arenden";
   var viewAsCustomer = false;
+  var onbCollapsed = false; // kundsidan: minns om "Din resa mot en ny sida" är hopfälld
   // Admin kan förhandsvisa en specifik kunds portal (skrivskyddat). När previewUid är satt
   // läser kundvyerna mot den kunden, och alla kundåtgärder blockeras.
   var previewUid = null;
@@ -1124,7 +1125,8 @@
           f("bill-ref", "Er referens / inköpsordernr", b.reference) + "</div>";
       }
 
-      var html = '<div class="card onb-card"><h2>Din resa mot en ny sida</h2>' +
+      var html = '<details class="card onb-card onb-master"' + (onbCollapsed ? "" : " open") + '>' +
+        '<summary class="onb-master-sum"><h2>Din resa mot en ny sida</h2><span class="onb-acc-chev" aria-hidden="true">▾</span></summary>' +
         '<p class="muted">' + (allDone ? "Alla steg är klara — grattis!" : "Öppna varje steg för att se vad som gäller. Du kan alltid gå tillbaka och se vad du bockat av.") + "</p>" +
         '<div class="onb-acc">' + ONBOARDING_STEPS.map(function (s, i) {
           var n = i + 1, dn = isDone(n), cur = (n === current);
@@ -1209,9 +1211,11 @@
             '<span class="onb-acc-title">' + esc(s.title) + "</span>" + meta +
             '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary>' +
             '<div class="onb-acc-body">' + body + "</div></details>";
-        }).join("") + "</div></div>";
+        }).join("") + "</div></details>";
 
       box.innerHTML = html;
+      var onbMaster = box.querySelector(".onb-master");
+      if (onbMaster) onbMaster.addEventListener("toggle", function () { onbCollapsed = !onbMaster.open; });
 
       var specForView = spec ? spec.data : specFromBrief(brief);
       var specLabel = spec ? ("Version " + spec.version + " · " + fmtDate(spec.created_at) + (spec.source === "kund" ? " · er ändring" : "")) : "Förhandsvisning – ingen version fastställd ännu";
