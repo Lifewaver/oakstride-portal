@@ -1711,12 +1711,29 @@
     });
   }
 
+  // Bjud in en ny kund (skapar konto + skickar inbjudan via invite-customer edge function)
+  function inviteCustomer(email, full_name, company, btn) {
+    email = (email || "").trim();
+    if (!email || email.indexOf("@") === -1) { toast("Ange en giltig e-post.", true); return; }
+    if (!window.confirm("Ge " + email + " åtkomst till portalen?\n\nEn inbjudan mejlas och kontot aktiveras.")) return;
+    var orig = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Bjuder in…"; }
+    function restore() { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+    sb.functions.invoke("invite-customer", { body: { email: email, full_name: full_name || null, company: company || null } }).then(function (r) {
+      var d = (r && r.data) || {};
+      if (r && r.error) { toast("Kunde inte bjuda in: " + r.error.message, true); restore(); return; }
+      if (!d.ok) { toast(d.error || "Något gick fel.", true); restore(); return; }
+      toast(d.message || "Inbjudan skickad.");
+      renderAdminCustomers("nya");
+    }, function (e) { toast("Fel: " + ((e && e.message) || e), true); restore(); });
+  }
+
   function renderAdminCustomers(mode) {
     var isNew = mode === "nya";
     main.innerHTML = '<h1>' + (isNew ? "Nya kunder" : "Kunder") + '</h1><p class="muted">' + (isNew ? "Kunder som är under uppsättning (ännu inte lanserade) — se vems tur det är i varje kunds resa." : "Kunder med en lanserad site.") + '</p><div id="cust-box"><div class="spinner"></div></div>';
     Promise.all([
       sb.from("profiles").select("*").order("created_at", { ascending: false }),
-      sb.from("project_briefs").select("email"),
+      sb.from("project_briefs").select("name, email, company, description, created_at").order("created_at", { ascending: false }),
       sb.from("requirement_specs").select("user_id, version"),
       sb.from("extra_work_approvals").select("user_id, spec_version"),
       sb.from("onboarding_content").select("user_id, link").eq("step_no", 5),
@@ -1724,8 +1741,8 @@
     ]).then(function (out) {
       var box = document.getElementById("cust-box");
       if (out[0].error) { box.innerHTML = '<div class="empty">' + esc(out[0].error.message) + "</div>"; return; }
-      var rows = (out[0].data || []).filter(function (p) { return !p.is_admin && (isNew ? !p.launched_at : !!p.launched_at); });
-      if (!rows.length) { box.innerHTML = '<div class="empty">' + (isNew ? "Inga kunder under uppsättning." : "Inga lanserade kunder ännu.") + "</div>"; return; }
+      var all = out[0].data || [];
+      var rows = all.filter(function (p) { return !p.is_admin && (isNew ? !p.launched_at : !!p.launched_at); });
       var briefEmails = {}; (out[1].data || []).forEach(function (b) { briefEmails[(b.email || "").toLowerCase()] = true; });
       var latestSpec = {}; (out[2].data || []).forEach(function (s) { if (!(s.user_id in latestSpec) || s.version > latestSpec[s.user_id]) latestSpec[s.user_id] = s.version; });
       var approvals = {}; (out[3].data || []).forEach(function (a) { (approvals[a.user_id] = approvals[a.user_id] || {})[a.spec_version] = true; });
@@ -1735,26 +1752,65 @@
         var sv = latestSpec[p.id];
         return journeyTurn({ launched_at: p.launched_at, brief: !!briefEmails[(p.email || "").toLowerCase()], meeting_at: p.meeting_at, specVer: sv || null, offerApproved: !!(sv && approvals[p.id] && approvals[p.id][sv]), draftLink: !!draft[p.id], siteApproved: !!siteApp[p.id] });
       }
-      box.innerHTML = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="table"><thead><tr><th>Kund</th><th>Hemsida</th><th>GitHub-repo</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
-        rows.map(function (p) {
-          return "<tr data-id='" + esc(p.id) + "'>" +
-            "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
-            (p.company ? "<br>" + esc(p.company) : "") +
-            "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Öppna kundens resa &rarr;</button>" +
-            "<br><span style='display:inline-block;margin-top:.35rem'>" + turnChip(statusFor(p)) + "</span></td>" +
-            '<td><input type="text" class="inp-site" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></td>' +
-            '<td><input type="text" class="inp-repo" value="' + esc(p.github_repo || "") + '" placeholder="ägare/repo"></td>' +
-            "<td>" + fmtDate(p.created_at) + "</td>" +
-            '<td><button class="btn btn-sm btn-inline ' + (p.approved ? "btn-google" : "btn-primary") + ' btn-approve">' +
-            (p.approved ? "Stäng av" : "Godkänn") + "</button></td></tr>";
-        }).join("") + "</tbody></table></div>";
+      // Nya kunder: inbjudningsformulär + inkomna förfrågningar (leads utan konto)
+      var topHtml = "";
+      if (isNew) {
+        var profileEmails = {}; all.forEach(function (p) { profileEmails[(p.email || "").toLowerCase()] = true; });
+        var pending = (out[1].data || []).filter(function (b) { return b.email && !profileEmails[b.email.toLowerCase()]; });
+        topHtml =
+          '<div class="card" style="margin-bottom:1rem"><h2>Bjud in ny kund</h2>' +
+          '<p class="muted">Skapa ett konto och skicka en inbjudan — kunden sätter lösenord via mejlet och dyker upp här.</p>' +
+          '<form id="form-invite"><div class="addon-form-row">' +
+          '<div style="flex:2"><label for="inv-email">E-post *</label><input type="email" id="inv-email" required placeholder="namn@foretag.se"></div>' +
+          '<div><label for="inv-name">Namn</label><input type="text" id="inv-name" placeholder="För- och efternamn"></div>' +
+          '<div><label for="inv-company">Företag</label><input type="text" id="inv-company" placeholder="Företag AB"></div>' +
+          '</div><button type="submit" class="btn btn-primary btn-inline">Bjud in</button></form></div>' +
+          (pending.length
+            ? '<div class="card" style="margin-bottom:1rem"><h2>Inkomna förfrågningar <span class="chip chip-new">' + pending.length + "</span></h2>" +
+              '<p class="muted">Leads från oakstride.se som ännu inte har ett konto.</p>' +
+              pending.map(function (b) {
+                return '<div class="addon" style="align-items:flex-start"><div class="addon-main"><strong>' + esc(b.name || b.email) + "</strong>" + (b.company ? " · " + esc(b.company) : "") +
+                  '<div class="muted" style="font-size:.82rem">' + esc(b.email) + " · " + fmtDate(b.created_at) + "</div>" +
+                  (b.description ? '<div class="muted addon-desc">' + esc(b.description) + "</div>" : "") + "</div>" +
+                  '<button class="btn btn-primary btn-sm btn-inline" data-invite-brief="1" data-email="' + esc(b.email) + '" data-name="' + esc(b.name || "") + '" data-company="' + esc(b.company || "") + '">Bjud in</button></div>';
+              }).join("") + "</div>"
+            : "");
+      }
+      var tableHtml = rows.length
+        ? '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="table"><thead><tr><th>Kund</th><th>Hemsida</th><th>GitHub-repo</th><th>Registrerad</th><th>Status</th></tr></thead><tbody>' +
+          rows.map(function (p) {
+            return "<tr data-id='" + esc(p.id) + "'>" +
+              "<td><strong>" + esc(p.full_name || "—") + "</strong><br><span class='user-email'>" + esc(p.email) + "</span>" +
+              (p.company ? "<br>" + esc(p.company) : "") +
+              "<br><button class='linklike btn-manage' data-manage='" + esc(p.id) + "'>Öppna kundens resa &rarr;</button>" +
+              "<br><span style='display:inline-block;margin-top:.35rem'>" + turnChip(statusFor(p)) + "</span></td>" +
+              '<td><input type="text" class="inp-site" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></td>' +
+              '<td><input type="text" class="inp-repo" value="' + esc(p.github_repo || "") + '" placeholder="ägare/repo"></td>' +
+              "<td>" + fmtDate(p.created_at) + "</td>" +
+              '<td><button class="btn btn-sm btn-inline ' + (p.approved ? "btn-google" : "btn-primary") + ' btn-approve">' +
+              (p.approved ? "Stäng av" : "Godkänn") + "</button></td></tr>";
+          }).join("") + "</tbody></table></div>"
+        : '<div class="empty">' + (isNew ? "Inga kunder under uppsättning ännu." : "Inga lanserade kunder ännu.") + "</div>";
+      box.innerHTML = topHtml + tableHtml;
+      if (isNew) {
+        var invForm = document.getElementById("form-invite");
+        if (invForm) invForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          inviteCustomer(document.getElementById("inv-email").value, document.getElementById("inv-name").value, document.getElementById("inv-company").value, invForm.querySelector("button[type=submit]"));
+        });
+        Array.prototype.forEach.call(box.querySelectorAll("[data-invite-brief]"), function (btn) {
+          btn.addEventListener("click", function () {
+            inviteCustomer(btn.getAttribute("data-email"), btn.getAttribute("data-name"), btn.getAttribute("data-company"), btn);
+          });
+        });
+      }
       Array.prototype.forEach.call(box.querySelectorAll("tr[data-id]"), function (tr) {
         var pid = tr.getAttribute("data-id");
         var current = rows.find(function (p) { return p.id === pid; });
         tr.querySelector(".btn-approve").addEventListener("click", function () {
           sb.from("profiles").update({ approved: !current.approved }).eq("id", pid).then(function (res2) {
             if (res2.error) toast("Kunde inte uppdatera: " + res2.error.message, true);
-            else { toast(current.approved ? "Kontot avstängt." : "Kontot godkänt."); renderAdminCustomers(); }
+            else { toast(current.approved ? "Kontot avstängt." : "Kontot godkänt."); renderAdminCustomers(mode); }
           });
         });
         tr.querySelector(".inp-site").addEventListener("change", function (e) {
@@ -1921,7 +1977,7 @@
             }).join("") + "</div>"
           : '<p class="muted">Inga ärenden ännu.</p>') + "</div>";
 
-      document.getElementById("btn-back").addEventListener("click", renderAdminCustomers);
+      document.getElementById("btn-back").addEventListener("click", function () { renderAdminCustomers(p.launched_at ? "kunder" : "nya"); });
       document.getElementById("btn-preview-portal").addEventListener("click", function () {
         window.open(location.origin + location.pathname + "?preview=" + encodeURIComponent(pid), "_blank");
       });
