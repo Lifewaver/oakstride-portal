@@ -546,8 +546,13 @@
   var previewUid = null;
   var previewProfile = null;
   var previewWindow = false; // true när kundportalen förhandsvisas i ett eget fönster (?preview=)
-  function cuid() { return previewUid || (session && session.user && session.user.id); }
-  function cprofile() { return previewProfile || profile; }
+  // Admin "agerar som kund" (full åtkomst): actingUid pekar på kunden vars vy visas och
+  // vars skrivningar sker. Skillnad mot preview: skrivningar blockeras INTE.
+  var actingUid = null;
+  var actingProfile = null;
+  var actingCustomers = [];
+  function cuid() { return actingUid || previewUid || (session && session.user && session.user.id); }
+  function cprofile() { return actingProfile || previewProfile || profile; }
   function previewBlocked() {
     if (previewUid) { toast("Förhandsvisning – du kan inte göra ändringar som kunden.", true); return true; }
     return false;
@@ -570,6 +575,21 @@
       });
       renderCustomer();
     });
+  }
+
+  // Byt vilken kund admin agerar som (från väljaren i kundvyns banner).
+  function switchActing(uid) {
+    var c = actingCustomers.filter(function (x) { return x.id === uid; })[0];
+    if (!c) return;
+    actingUid = uid; actingProfile = c;
+    renderCustomer();
+  }
+  // Lämna "agera som kund"-läget och gå tillbaka till adminvyn.
+  function exitActing() {
+    viewAsCustomer = false; actingUid = null; actingProfile = null;
+    var vb = document.getElementById("btn-viewas"); if (vb) vb.textContent = "Visa som kund";
+    var nav = document.getElementById("admin-nav"); if (nav) nav.hidden = !(profile && profile.is_admin);
+    renderAdmin();
   }
 
   function show(name) {
@@ -680,7 +700,7 @@
     btn.disabled = true;
     sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
       sb.from("agreement_acceptances").insert({
-        user_id: session.user.id,
+        user_id: cuid(),
         agreement_version: custAgreement.version,
         document_title: custAgreement.title,
         document_hash: hash,
@@ -787,11 +807,23 @@
   });
 
   document.getElementById("btn-viewas").addEventListener("click", function () {
-    viewAsCustomer = !viewAsCustomer;
-    if (!viewAsCustomer) { previewUid = null; previewProfile = null; }
-    this.textContent = viewAsCustomer ? "Tillbaka till admin" : "Visa som kund";
-    document.getElementById("admin-nav").hidden = viewAsCustomer || !profile.is_admin;
-    if (viewAsCustomer) renderCustomer(); else renderAdmin();
+    var self = this;
+    if (!viewAsCustomer) {
+      // Gå in i "agera som kund"-läge: hämta kunderna, välj den första, visa kundvyn.
+      sb.from("profiles").select("id, full_name, company, email, website")
+        .eq("is_admin", false).order("company", { ascending: true }).then(function (res) {
+          actingCustomers = (res.data || []).filter(function (c) { return c && c.id; });
+          if (!actingCustomers.length) { toast("Det finns inga kunder att agera som ännu.", true); return; }
+          viewAsCustomer = true;
+          actingUid = actingCustomers[0].id;
+          actingProfile = actingCustomers[0];
+          self.textContent = "Tillbaka till admin";
+          document.getElementById("admin-nav").hidden = true;
+          renderCustomer();
+        });
+    } else {
+      exitActing();
+    }
   });
 
   document.getElementById("form-setpass").addEventListener("submit", function (e) {
@@ -936,6 +968,14 @@
     var siteUrl = site ? "https://" + site : null;
     var firstName = (cp.full_name || "").split(" ")[0];
     main.innerHTML =
+      (actingUid
+        ? '<div style="background:#8a4b1e;color:#fff;padding:.6rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-size:.92rem">' +
+          '<span>🧑‍💻 Du agerar som kund <strong>(full åtkomst)</strong>:</span>' +
+          '<select id="acting-picker" style="padding:.3rem .5rem;border-radius:6px;border:0;font-size:.92rem">' +
+            actingCustomers.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === actingUid ? " selected" : "") + ">" + esc(c.company || c.full_name || c.email) + "</option>"; }).join("") +
+          "</select>" +
+          '<button id="btn-acting-exit" class="btn btn-ghost btn-sm" style="margin-left:auto;background:#fff">Tillbaka till admin</button></div>'
+        : "") +
       (previewUid
         ? '<div style="background:#1e3a2f;color:#fff;padding:.6rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-size:.92rem">' +
           '<span>👁 Förhandsvisar <strong>' + esc(cp.full_name || cp.email) + '</strong>s portal — skrivskyddat</span>' +
@@ -962,6 +1002,12 @@
       '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
     document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
     document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
+    if (actingUid) {
+      var apk = document.getElementById("acting-picker");
+      if (apk) apk.addEventListener("change", function () { switchActing(this.value); });
+      var aex = document.getElementById("btn-acting-exit");
+      if (aex) aex.addEventListener("click", exitActing);
+    }
     if (previewUid) {
       var pe = document.getElementById("btn-preview-exit");
       if (pe) pe.addEventListener("click", function () { if (previewWindow) window.close(); else exitPreview(); });
@@ -1205,11 +1251,11 @@
     var summary = orderSummaryText(spec.data, ordered);
     sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
       sb.from("agreement_acceptances").insert({
-        user_id: session.user.id, agreement_version: custAgreement.version, document_title: custAgreement.title,
+        user_id: cuid(), agreement_version: custAgreement.version, document_title: custAgreement.title,
         document_hash: hash, user_agent: navigator.userAgent, order_summary: summary
       }).then(function (r2) {
         if (r2.error && r2.error.code !== "23505") { toast("Kunde inte spara: " + r2.error.message, true); return; }
-        sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: spec.version }).then(function () {
+        sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: spec.version }).then(function () {
           toast("Tack! Den uppdaterade offerten är godkänd — en ny orderbekräftelse skickas.");
           loadOnboarding();
         });
@@ -1224,17 +1270,17 @@
     var b = { company: val("bill-company"), org_nr: val("bill-org"), address: val("bill-addr") || null, postal_city: val("bill-postcity") || null, invoice_email: val("bill-email"), reference: val("bill-ref") || null };
     if (!b.company || !b.org_nr || !b.invoice_email) { toast("Fyll i minst företagsnamn, org.nr och fakturamejl.", true); return; }
     btn.disabled = true;
-    b.user_id = session.user.id; b.updated_at = new Date().toISOString();
+    b.user_id = cuid(); b.updated_at = new Date().toISOString();
     sb.from("billing_details").upsert(b).then(function (r1) {
       if (r1.error) { toast("Kunde inte spara faktureringsuppgifter: " + r1.error.message, true); btn.disabled = false; return; }
       var summary = orderSummaryText(spec.data, ordered);
       sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
         sb.from("agreement_acceptances").insert({
-          user_id: session.user.id, agreement_version: custAgreement.version, document_title: custAgreement.title,
+          user_id: cuid(), agreement_version: custAgreement.version, document_title: custAgreement.title,
           document_hash: hash, user_agent: navigator.userAgent, order_summary: summary
         }).then(function (r2) {
           if (r2.error && r2.error.code !== "23505") { toast("Kunde inte spara godkännande: " + r2.error.message, true); btn.disabled = false; return; }
-          sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: spec.version }).then(function () {
+          sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: spec.version }).then(function () {
             toast("Tack! Offert och villkor godkända — en orderbekräftelse skickas till din e-post.");
             loadOnboarding();
           });
@@ -1268,7 +1314,7 @@
 
   function checkoffStep(n) {
     if (previewBlocked()) return;
-    sb.from("onboarding_checkoffs").insert({ user_id: session.user.id, step_no: n }).then(function (res) {
+    sb.from("onboarding_checkoffs").insert({ user_id: cuid(), step_no: n }).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Steg godkänt!");
       loadOnboarding();
@@ -1277,7 +1323,7 @@
 
   function saveExtraApproval(version) {
     if (previewBlocked()) return;
-    sb.from("extra_work_approvals").insert({ user_id: session.user.id, spec_version: version }).then(function (res) {
+    sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: version }).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Tack! Det extra arbetet är godkänt.");
       loadOnboarding();
@@ -1296,7 +1342,7 @@
 
   function saveSpecClarification(scope, text) {
     if (previewBlocked()) return;
-    sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null }).then(function (res) {
+    sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null, p_user: actingUid || null }).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
       if (!res.data) { toast("Kravbilden är inte redo för förtydliganden ännu.", true); return; }
       toast("Tack! Ditt förtydligande är dokumenterat i kravspecifikationen.");
@@ -1410,7 +1456,7 @@
       var btn = e.target.querySelector("button[type=submit]");
       btn.disabled = true;
       sb.from("requests").insert({
-        user_id: session.user.id,
+        user_id: cuid(),
         title: document.getElementById("f-title").value.trim(),
         page_url: document.getElementById("f-url").value.trim() || null,
         priority: document.getElementById("f-prio").value,
@@ -1584,7 +1630,7 @@
         if (previewBlocked()) return;
         var body = document.getElementById("c-body").value.trim();
         if (!body) return;
-        sb.from("request_comments").insert({ request_id: id, author_id: session.user.id, body: body }).then(function (res) {
+        sb.from("request_comments").insert({ request_id: id, author_id: cuid(), body: body }).then(function (res) {
           if (res.error) { toast("Kunde inte skicka: " + res.error.message, true); return; }
           renderDetail(id, isAdmin);
         });
