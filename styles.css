@@ -405,3 +405,5 @@ form .btn{margin-top:1rem}
 .addon-actions{display:flex;gap:.5rem;align-items:center}
 .addon-form-row{display:flex;gap:1rem;flex-wrap:wrap}
 .addon-form-row>div{flex:1;min-width:140px}
+
+.onb-admin-mark{margin-top:.9rem;padding-top:.7rem;border-top:1px dashed #d5dbd5;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}

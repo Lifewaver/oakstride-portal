@@ -1884,7 +1884,7 @@
 
       var proposals = out[8] && !out[8].error ? (out[8].data || []) : [];
       var utkastReadyA = !!(content[5] && (content[5].link || content[5].body));
-      var mDone = { 1: step1Done, 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved, 4: utkastReadyA, 5: !!p.launched_at };
+      var mDone = { 1: step1Done || !!done[1], 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved || !!done[3], 4: utkastReadyA || !!done[4], 5: !!p.launched_at };
       var mCurrent = 0; for (var mk = 1; mk <= ONBOARDING_STEPS.length; mk++) { if (!mDone[mk]) { mCurrent = mk; break; } }
       var jt = journeyTurn({ launched_at: p.launched_at, brief: !!brief, meeting_at: p.meeting_at, specVer: latestSpec ? latestSpec.version : null, offerApproved: latestExtraApproved, draftLink: !!(content[5] && content[5].link), siteApproved: !!done[5] });
       function propThread(list) {
@@ -1968,7 +1968,12 @@
           var n = i + 1, dn = mDone[n], cur = n === mCurrent;
           var cls = dn ? "done" : (cur ? "current" : "upcoming");
           var meta = dn ? '<span class="onb-acc-meta">✓ klart</span>' : (cur ? '<span class="onb-acc-meta" style="color:' + (jt.turn === "admin" ? "#8a4b1e" : "#2d46c4") + '">' + (jt.turn === "admin" ? "🟠 Din tur" : "⏳ Väntar på kund") + "</span>" : "");
-          return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + '><summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + '</span><span class="onb-acc-title">' + esc(s.title) + "</span>" + meta + '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary><div class="onb-acc-body">' + stepBody(n) + "</div></details>";
+          var adminMark = "";
+          if (n < 5) {
+            if (done[n]) adminMark = '<div class="onb-admin-mark"><span class="muted onb-hint-sm">Klarmarkerat av dig.</span> <button class="btn btn-ghost btn-sm" data-undo="' + n + '">Ångra klarmarkering</button></div>';
+            else if (!mDone[n]) adminMark = '<div class="onb-admin-mark"><button class="btn btn-ghost btn-sm" data-mark-done="' + n + '">✓ Markera steg som klart</button> <span class="muted onb-hint-sm">Hoppa över automatiken och markera steget klart manuellt.</span></div>';
+          }
+          return '<details class="onb-acc-item ' + cls + '"' + (cur ? " open" : "") + '><summary class="onb-acc-sum"><span class="onb-dot">' + (dn ? "✓" : n) + '</span><span class="onb-acc-title">' + esc(s.title) + "</span>" + meta + '<span class="onb-acc-chev" aria-hidden="true">▾</span></summary><div class="onb-acc-body">' + stepBody(n) + adminMark + "</div></details>";
         }).join("") + "</div></div>" +
         '<div class="card"><h2>Ärenden' + (newCount ? ' <span class="chip chip-new">' + newCount + " nya</span>" : "") + "</h2>" +
         (requests.length
@@ -1988,6 +1993,15 @@
         btn.addEventListener("click", function () {
           sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo"))).then(function (r) {
             if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
+          });
+        });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll("[data-mark-done]"), function (btn) {
+        btn.addEventListener("click", function () {
+          var n = Number(btn.getAttribute("data-mark-done"));
+          sb.from("onboarding_checkoffs").insert({ user_id: pid, step_no: n }).then(function (r) {
+            if (r.error) toast("Kunde inte markera: " + r.error.message, true);
+            else { toast("Steg " + n + " markerat som klart."); renderAdminCustomerDetail(pid); }
           });
         });
       });
