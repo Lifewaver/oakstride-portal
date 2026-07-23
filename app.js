@@ -1382,6 +1382,14 @@
         box.innerHTML = '<p class="muted">Besöksstatistik aktiveras för din hemsida inom kort.</p>';
         return;
       }
+      // Ingen mätdata alls: visa INTE en nollad graf (ser ut som uppmätt nolltrafik) —
+      // förklara i stället att mätkoden behöver vara installerad på sidan.
+      var hasData = (Number(s.total_30) || 0) > 0 || (Number(s.total_7) || 0) > 0 || (s.top_pages && s.top_pages.length);
+      if (!hasData) {
+        box.innerHTML = '<p class="muted">Ingen besöksdata ännu för <strong>' + esc(site) + "</strong>.</p>" +
+          '<p class="muted onb-hint-sm">Besöksstatistiken visas här när OakStrides mätkod finns på sidan och de första besöken kommit in. Saknas siffror på en sajt som varit igång ett tag betyder det oftast att mätkoden inte är installerad — inte att sidan saknar besökare.</p>';
+        return;
+      }
       var daily = s.daily || [];
       var max = 1;
       daily.forEach(function (d) { if (d.c > max) max = d.c; });
