@@ -1758,13 +1758,13 @@
         var profileEmails = {}; all.forEach(function (p) { profileEmails[(p.email || "").toLowerCase()] = true; });
         var pending = (out[1].data || []).filter(function (b) { return b.email && !profileEmails[b.email.toLowerCase()]; });
         topHtml =
-          '<div class="card" style="margin-bottom:1rem"><h2>Bjud in ny kund</h2>' +
-          '<p class="muted">Skapa ett konto och skicka en inbjudan — kunden sätter lösenord via mejlet och dyker upp här.</p>' +
-          '<form id="form-invite"><div class="addon-form-row">' +
+          '<details class="card" style="margin-bottom:1rem"><summary style="cursor:pointer;font-size:1.15rem;font-weight:600;color:var(--pine)">+ Bjud in ny kund</summary>' +
+          '<p class="muted" style="margin:.7rem 0 0">Skapa ett konto och skicka en inbjudan — kunden sätter lösenord via mejlet och dyker upp här.</p>' +
+          '<form id="form-invite" style="margin-top:.6rem"><div class="addon-form-row">' +
           '<div style="flex:2"><label for="inv-email">E-post *</label><input type="email" id="inv-email" required placeholder="namn@foretag.se"></div>' +
           '<div><label for="inv-name">Namn</label><input type="text" id="inv-name" placeholder="För- och efternamn"></div>' +
           '<div><label for="inv-company">Företag</label><input type="text" id="inv-company" placeholder="Företag AB"></div>' +
-          '</div><button type="submit" class="btn btn-primary btn-inline">Bjud in</button></form></div>' +
+          '</div><button type="submit" class="btn btn-primary btn-inline">Bjud in</button></form></details>' +
           (pending.length
             ? '<div class="card" style="margin-bottom:1rem"><h2>Inkomna förfrågningar <span class="chip chip-new">' + pending.length + "</span></h2>" +
               '<p class="muted">Leads från oakstride.se som ännu inte har ett konto.</p>' +
