@@ -1603,8 +1603,8 @@
   });
 
   function renderAdmin() {
-    if (adminTab === "kunder") return renderAdminCustomers();
-    if (adminTab === "briefs") return renderAdminBriefs();
+    if (adminTab === "kunder") return renderAdminCustomers("kunder");
+    if (adminTab === "nya") return renderAdminCustomers("nya");
     if (adminTab === "priser") return renderAdminPriser();
     main.innerHTML =
       '<div class="page-head"><h1>Alla ärenden</h1>' +
@@ -1711,8 +1711,9 @@
     });
   }
 
-  function renderAdminCustomers() {
-    main.innerHTML = '<h1>Kunder</h1><p class="muted">Godkänn konton, koppla hemsida och se vems tur det är i varje kunds resa.</p><div id="cust-box"><div class="spinner"></div></div>';
+  function renderAdminCustomers(mode) {
+    var isNew = mode === "nya";
+    main.innerHTML = '<h1>' + (isNew ? "Nya kunder" : "Kunder") + '</h1><p class="muted">' + (isNew ? "Kunder som är under uppsättning (ännu inte lanserade) — se vems tur det är i varje kunds resa." : "Kunder med en lanserad site.") + '</p><div id="cust-box"><div class="spinner"></div></div>';
     Promise.all([
       sb.from("profiles").select("*").order("created_at", { ascending: false }),
       sb.from("project_briefs").select("email"),
@@ -1723,8 +1724,8 @@
     ]).then(function (out) {
       var box = document.getElementById("cust-box");
       if (out[0].error) { box.innerHTML = '<div class="empty">' + esc(out[0].error.message) + "</div>"; return; }
-      var rows = (out[0].data || []).filter(function (p) { return !p.is_admin; });
-      if (!rows.length) { box.innerHTML = '<div class="empty">Inga kundkonton ännu.</div>'; return; }
+      var rows = (out[0].data || []).filter(function (p) { return !p.is_admin && (isNew ? !p.launched_at : !!p.launched_at); });
+      if (!rows.length) { box.innerHTML = '<div class="empty">' + (isNew ? "Inga kunder under uppsättning." : "Inga lanserade kunder ännu.") + "</div>"; return; }
       var briefEmails = {}; (out[1].data || []).forEach(function (b) { briefEmails[(b.email || "").toLowerCase()] = true; });
       var latestSpec = {}; (out[2].data || []).forEach(function (s) { if (!(s.user_id in latestSpec) || s.version > latestSpec[s.user_id]) latestSpec[s.user_id] = s.version; });
       var approvals = {}; (out[3].data || []).forEach(function (a) { (approvals[a.user_id] = approvals[a.user_id] || {})[a.spec_version] = true; });
