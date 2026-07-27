@@ -1147,7 +1147,8 @@
       sb.from("requirement_specs").select("*").eq("user_id", cuid()).order("version", { ascending: false }),
       sb.from("extra_work_approvals").select("spec_version").eq("user_id", cuid()),
       sb.from("billing_details").select("*").eq("user_id", cuid()).maybeSingle(),
-      sb.from("site_change_proposals").select("*").eq("user_id", cuid()).order("created_at")
+      sb.from("site_change_proposals").select("*").eq("user_id", cuid()).order("created_at"),
+      sb.from("build_jobs").select("shared_at").eq("customer_id", cuid()).not("shared_at", "is", null).limit(1)
     ]).then(function (out) {
       if (!box.isConnected) return;
       var addons = out[0].error ? [] : (out[0].data || []);
@@ -1170,9 +1171,10 @@
       var ordered = addons.filter(function (a) { return a.status === "ordered"; });
       var done = {}; checkoffs.forEach(function (r) { done[r.step_no] = r.done_at; });
       var proposals = out[8] && !out[8].error ? (out[8].data || []) : [];
+      var buildShared = !!(out[9] && !out[9].error && (out[9].data || []).length);
       var cp = cprofile();
 
-      function utkastReady() { var c = content[5]; return !!(c && (c.link || c.body)); }
+      function utkastReady() { var c = content[5]; return buildShared || !!(c && (c.link || c.body)); }
       function isDone(n) {
         if (n === 1) return !!brief;
         if (n === 2) return !!(cp.meeting_at || done[2]);
@@ -2233,7 +2235,8 @@
         sb.from("onboarding_notes").select("step_no, body, updated_at").eq("user_id", pid),
         sb.from("requirement_specs").select("*").eq("user_id", pid).order("version", { ascending: false }),
         sb.from("extra_work_approvals").select("spec_version, approved_at").eq("user_id", pid),
-        sb.from("site_change_proposals").select("*").eq("user_id", pid).order("created_at")
+        sb.from("site_change_proposals").select("*").eq("user_id", pid).order("created_at"),
+        sb.from("build_jobs").select("status, shared_at, preview_url, created_at").eq("customer_id", pid).order("created_at", { ascending: false })
       ]).then(function (out) {
       var addons = out[0].data || [];
       var done = {}, doneExtras = {}; (out[1].data || []).forEach(function (r) { done[r.step_no] = r.done_at; doneExtras[r.step_no] = r.with_extras; });
@@ -2256,10 +2259,15 @@
       var siteUrl = site ? "https://" + site : null;
 
       var proposals = out[8] && !out[8].error ? (out[8].data || []) : [];
-      var utkastReadyA = !!(content[5] && (content[5].link || content[5].body));
+      var buildJobs = out[9] && !out[9].error ? (out[9].data || []) : [];
+      var sharedJob = buildJobs.filter(function (j) { return j.shared_at; })[0] || null;
+      var buildShared = !!sharedJob;
+      var sharedPreview = sharedJob ? sharedJob.preview_url : null;
+      var manualDraft = !!(content[5] && (content[5].link || content[5].body));
+      var utkastReadyA = buildShared || manualDraft;   // utkast delat via bygg-flödet ELLER manuell länk
       var mDone = { 1: step1Done || !!done[1], 2: !!(p.meeting_at || done[2]), 3: latestExtraApproved || !!done[3], 4: utkastReadyA || !!done[4], 5: !!p.launched_at };
       var mCurrent = 0; for (var mk = 1; mk <= ONBOARDING_STEPS.length; mk++) { if (!mDone[mk]) { mCurrent = mk; break; } }
-      var jt = journeyTurn({ launched_at: p.launched_at, brief: !!brief, meeting_at: p.meeting_at, specVer: latestSpec ? latestSpec.version : null, offerApproved: latestExtraApproved, draftLink: !!(content[5] && content[5].link), siteApproved: !!done[5] });
+      var jt = journeyTurn({ launched_at: p.launched_at, brief: !!brief, meeting_at: p.meeting_at, specVer: latestSpec ? latestSpec.version : null, offerApproved: latestExtraApproved, draftLink: utkastReadyA, siteApproved: !!done[5] });
       function propThread(list) {
         return list.length
           ? list.map(function (pr) {
@@ -2303,10 +2311,11 @@
           '<div class="addon-form-row"><div><label for="a-price">Pris (kr) *</label><input type="text" id="a-price" required placeholder="150"></div>' +
           '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div></div>' +
           '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form>' +
-          '<div id="admin-addons" style="margin-top:.8rem">' + adminAddonList(addons) + "</div>" +
-          '<hr style="margin:1.4rem 0;border:0;border-top:1px solid #e2e6e2">' +
-          '<details class="onb-build"><summary style="cursor:pointer;font-weight:600;padding:.5rem 0">🔧 Bygg sajt (utkast)</summary>' +
-          '<div style="margin-top:.6rem"><p class="muted onb-hint-sm">Förifyllt från kundens uppgifter — justera vid behov och bygg ett utkast. Jobbet kopplas automatiskt till den här kunden.</p>' +
+          '<div id="admin-addons" style="margin-top:.8rem">' + adminAddonList(addons) + "</div>";
+        if (n === 4) return '<p class="muted onb-hint-sm">Bygg ett utkast, dela det med kunden och hantera ändringsönskemål här.</p>' +
+          // Bygg-panel (förifylld) – kärnan i steg 4
+          '<details class="onb-build" open><summary style="cursor:pointer;font-weight:600;padding:.5rem 0">🔧 Bygg sajt (utkast)</summary>' +
+          '<div style="margin-top:.6rem"><p class="muted onb-hint-sm">Förifyllt från kundens uppgifter — justera och bygg. Jobbet kopplas automatiskt till kunden. Klicka sedan &quot;Dela utkast med kund&quot; i listan nedan.</p>' +
           buildFormHtml({
             company: p.company || p.full_name || "",
             slug: slugify(p.company || p.full_name || ""),
@@ -2315,17 +2324,23 @@
             about: brief ? brief.description : ""
           }, false) +
           '<h3 style="margin-top:1.2rem">Byggjobb för kunden</h3><div id="build-list"><div class="spinner"></div></div>' +
-          "</div></details>";
-        if (n === 4) return '<label for="adm-website">Kundens sid-adress</label>' +
-          '<div class="addon-form-row"><div style="flex:2"><input type="text" id="adm-website" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></div>' +
-          '<div><button class="btn btn-ghost btn-inline" data-save-website="1">Spara adress</button></div></div>' +
+          "</div></details>" +
+          // Utkast-status + manuell fallback
+          '<hr style="margin:1.4rem 0;border:0;border-top:1px solid #e2e6e2"><h3 style="margin:.4rem 0">Utkast till kund</h3>' +
+          (buildShared
+            ? '<p class="onb-verified">✓ Utkast delat via bygg-flödet' + (sharedPreview ? ' — <a href="' + esc(sharedPreview) + '" target="_blank" rel="noopener">öppna förhandsvisning &#8599;</a>' : "") + '. Kunden ser det på steg 4 och godkänner på steg 5.</p>'
+            : '<p class="status-note">Bygg ett utkast ovan och klicka &quot;Dela utkast med kund&quot; — då mejlas kunden och länken visas i portalen.</p>') +
+          '<details class="onb-manual"><summary style="cursor:pointer;color:var(--muted,#59636a);padding:.4rem 0;font-size:.92rem">Manuell/extern länk (fallback)</summary>' +
+          '<div style="margin-top:.5rem"><p class="muted onb-hint-sm">För sajter som inte byggts av agenten — ange en extern länk till utkastet.</p>' +
           '<label for="adm-draft-link">Länk till utkast / byggd sida</label>' +
           '<input type="text" id="adm-draft-link" value="' + esc(content[5] ? (content[5].link || "") : "") + '" placeholder="https://...">' +
           '<label for="adm-draft-note">Kommentar till kunden (valfri)</label>' +
           '<textarea id="adm-draft-note" rows="2" placeholder="Vad kunden särskilt bör titta på...">' + esc(content[5] ? (content[5].body || "") : "") + "</textarea>" +
-          '<button class="btn btn-primary btn-inline" data-send-draft="1">Skicka utkast</button>' +
-          (utkastReadyA ? '<p class="onb-verified" style="margin-top:.6rem">✓ Utkast skickat — kunden granskar på steg 4 (godkänner på steg 5)</p>' : '<p class="status-note" style="margin-top:.6rem">Skicka ett utkast så kunden kan granska.</p>') +
-          '<hr style="margin:1.2rem 0;border:0;border-top:1px solid #e2e6e2"><h3 style="margin:.4rem 0">Ändringsförslag</h3>' +
+          '<button class="btn btn-ghost btn-inline" data-send-draft="1">Skicka manuellt utkast</button>' +
+          (manualDraft ? '<p class="onb-verified" style="margin-top:.6rem">✓ Manuell utkastlänk sparad.</p>' : "") +
+          "</div></details>" +
+          // Ändringsförslag
+          '<hr style="margin:1.4rem 0;border:0;border-top:1px solid #e2e6e2"><h3 style="margin:.4rem 0">Ändringsförslag</h3>' +
           '<p class="muted onb-hint-sm">Kundens önskemål och dina förslag — kunden ser tråden på steg 4.</p>' +
           propThread(proposals) +
           '<textarea id="adm-prop" rows="3" placeholder="Skriv ett förslag till kunden..."></textarea>' +
