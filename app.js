@@ -1823,37 +1823,49 @@
     failed: "Misslyckades"
   };
 
-  function renderAdminBuild() {
-    var TEMPLATES = {}, currentExtra = [];
-    main.innerHTML =
-      '<div class="page-head"><h1>Bygg sajt</h1></div>' +
-      '<p class="muted">Fyll i en kort brief så bygger agenten ett utkast (förhandsvisning). Du granskar och publicerar sedan själv.</p>' +
-      '<form id="form-build" class="card" style="max-width:680px;display:grid;gap:.75rem">' +
-        '<label>Kund<select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select></label>' +
-        '<label>Företagsnamn<input id="b-company" required></label>' +
-        '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+"></label>' +
-        '<label>Segment (färg/tema)<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
-        '<label>Grundmall (layout)<select id="b-template"><option value="generisk">Generisk</option></select></label>' +
-        '<div id="b-extra" style="display:grid;gap:.75rem"></div>' +
-        '<label>Domän (utan https)<input id="b-domain" placeholder="foretag.se"></label>' +
-        '<label>Nyckelfunktion<select id="b-key">' +
-          '<option value="offert">Offert</option><option value="bokning">Bokning</option>' +
-          '<option value="meny">Meny/bordsbokning</option><option value="ehandel">E-handel</option>' +
-          '<option value="kontakt">Kontakt</option></select></label>' +
-        '<label>Rubrik (hero)<input id="b-headline"></label>' +
-        '<label>Ingress (hero)<textarea id="b-lead" rows="2"></textarea></label>' +
-        '<label>Tjänster (en per rad: <em>Titel | kort beskrivning</em>)<textarea id="b-services" rows="4"></textarea></label>' +
-        '<label>Om oss<textarea id="b-about" rows="2"></textarea></label>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">' +
-          '<label>Telefon<input id="b-phone"></label><label>E-post<input id="b-email" type="email"></label></div>' +
-        '<label>Ort<input id="b-city"></label>' +
-        '<button type="submit" class="btn btn-primary btn-inline">Bygg sajt</button>' +
-      "</form>" +
-      '<h2 style="margin-top:1.6rem">Byggjobb</h2><div id="build-list"><div class="spinner"></div></div>';
+  function slugify(s) {
+    return String(s || "").toLowerCase()
+      .replace(/å/g, "a").replace(/ä/g, "a").replace(/ö/g, "o")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
 
-    document.getElementById("form-build").addEventListener("submit", function (e) {
+  // Bygg-formuläret som återanvänds i globala vyn (med kunddropdown) och i
+  // kundens steg 3 (kund låst + förifyllt). pre = förifyllda värden.
+  function buildFormHtml(pre, showCust) {
+    pre = pre || {};
+    function val(v) { return v ? esc(v) : ""; }
+    function keyOpt(v, l) { return '<option value="' + v + '"' + (pre.keyFunction === v ? " selected" : "") + ">" + l + "</option>"; }
+    return '<form id="form-build" class="card" style="max-width:680px;display:grid;gap:.75rem">' +
+      (showCust ? '<label>Kund<select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select></label>' : "") +
+      '<label>Företagsnamn<input id="b-company" required value="' + val(pre.company) + '"></label>' +
+      '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+" value="' + val(pre.slug) + '"></label>' +
+      '<label>Segment (färg/tema)<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '"' + (pre.segment === s[0] ? " selected" : "") + ">" + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
+      '<label>Grundmall (layout)<select id="b-template"><option value="generisk">Generisk</option></select></label>' +
+      '<div id="b-extra" style="display:grid;gap:.75rem"></div>' +
+      '<label>Domän (utan https)<input id="b-domain" placeholder="foretag.se" value="' + val(pre.domain) + '"></label>' +
+      '<label>Nyckelfunktion<select id="b-key">' +
+        keyOpt("offert", "Offert") + keyOpt("bokning", "Bokning") + keyOpt("meny", "Meny/bordsbokning") + keyOpt("ehandel", "E-handel") + keyOpt("kontakt", "Kontakt") +
+        "</select></label>" +
+      '<label>Rubrik (hero)<input id="b-headline" value="' + val(pre.headline) + '"></label>' +
+      '<label>Ingress (hero)<textarea id="b-lead" rows="2">' + val(pre.lead) + "</textarea></label>" +
+      '<label>Tjänster (en per rad: <em>Titel | kort beskrivning</em>)<textarea id="b-services" rows="4">' + val(pre.services) + "</textarea></label>" +
+      '<label>Om oss<textarea id="b-about" rows="2">' + val(pre.about) + "</textarea></label>" +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">' +
+        '<label>Telefon<input id="b-phone" value="' + val(pre.phone) + '"></label><label>E-post<input id="b-email" type="email" value="' + val(pre.email) + '"></label></div>' +
+      '<label>Ort<input id="b-city" value="' + val(pre.city) + '"></label>' +
+      '<button type="submit" class="btn btn-primary btn-inline">Bygg sajt</button>' +
+      "</form>";
+  }
+
+  // Kopplar submit/mallar/kundlista till ett redan renderat #form-build.
+  // fixedCustomerId != null → kunden är låst (steg 3-varianten).
+  function wireBuildForm(fixedCustomerId, listId) {
+    var TEMPLATES = {}, currentExtra = [];
+    var form = document.getElementById("form-build");
+    if (!form) return;
+    form.addEventListener("submit", function (e) {
       e.preventDefault();
-      function v(id) { return (document.getElementById(id).value || "").trim(); }
+      function v(id) { var el = document.getElementById(id); return el ? (el.value || "").trim() : ""; }
       var slug = v("b-slug"), company = v("b-company"), segment = v("b-segment");
       if (!slug || !company) { toast("Fyll i minst företagsnamn och slug.", true); return; }
       var services = v("b-services").split("\n").map(function (l) {
@@ -1873,28 +1885,31 @@
         var el = document.getElementById("bx-" + f.key);
         if (el && (el.value || "").trim()) brief[f.key] = el.value.trim();
       });
-      var customer_id = v("b-customer") || null;
-      var btn = e.target.querySelector('button[type="submit"]');
+      var customer_id = fixedCustomerId || v("b-customer") || null;
+      var btn = form.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Skapar jobb…";
       // Insert räcker – en DB-trigger (dispatch_build_site) startar agenten automatiskt.
       sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief, customer_id: customer_id }).select().single().then(function (r) {
         btn.disabled = false; btn.textContent = "Bygg sajt";
         if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); return; }
         toast("Bygget startat! Följ status nedan.");
-        e.target.reset(); loadBuildJobs();
+        if (!fixedCustomerId) form.reset();
+        loadBuildJobs(listId, fixedCustomerId);
       });
     });
-    // Ladda kunder till dropdownen
-    sb.from("profiles").select("id, company, full_name, email").eq("is_admin", false).order("company", { ascending: true }).then(function (res) {
-      var sel = document.getElementById("b-customer");
-      if (!sel || res.error || !res.data) return;
-      res.data.forEach(function (p) {
-        var o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.company || p.full_name || p.email || p.id;
-        sel.appendChild(o);
+    // Ladda kunder till dropdownen (endast globala vyn)
+    if (document.getElementById("b-customer")) {
+      sb.from("profiles").select("id, company, full_name, email").eq("is_admin", false).order("company", { ascending: true }).then(function (res) {
+        var sel = document.getElementById("b-customer");
+        if (!sel || res.error || !res.data) return;
+        res.data.forEach(function (p) {
+          var o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.company || p.full_name || p.email || p.id;
+          sel.appendChild(o);
+        });
       });
-    });
+    }
     // Ladda grundmallar + dynamiska mall-specifika fält
     function renderExtra() {
       var key = (document.getElementById("b-template") || {}).value || "generisk";
@@ -1917,12 +1932,24 @@
       }
       renderExtra();
     });
-    loadBuildJobs();
+    loadBuildJobs(listId, fixedCustomerId);
   }
 
-  function loadBuildJobs() {
-    var box = document.getElementById("build-list"); if (!box) return;
-    sb.from("build_jobs").select("*").order("created_at", { ascending: false }).limit(30).then(function (res) {
+  // Global Bygg-vy = ren monitor. Själva byggandet görs från kundens steg 3.
+  function renderAdminBuild() {
+    main.innerHTML =
+      '<div class="page-head"><h1>Byggjobb</h1></div>' +
+      '<p class="muted">Sajter byggs från varje kunds <strong>steg 3</strong> (öppna kunden &rarr; panelen &quot;Bygg sajt&quot;). Här ser du alla byggjobb och kan dela utkast och publicera.</p>' +
+      '<div id="build-list"><div class="spinner"></div></div>';
+    loadBuildJobs("build-list", null);
+  }
+
+  function loadBuildJobs(boxId, customerId) {
+    boxId = boxId || "build-list";
+    var box = document.getElementById(boxId); if (!box) return;
+    var q = sb.from("build_jobs").select("*");
+    if (customerId) q = q.eq("customer_id", customerId);
+    q.order("created_at", { ascending: false }).limit(30).then(function (res) {
       if (res.error) { box.innerHTML = '<div class="empty">' + esc(res.error.message) + "</div>"; return; }
       var rows = res.data || [];
       if (!rows.length) { box.innerHTML = '<div class="empty">Inga byggjobb ännu.</div>'; return; }
@@ -1962,7 +1989,7 @@
           sb.from("build_jobs").update({ shared_at: new Date().toISOString() }).eq("id", btn.getAttribute("data-share")).then(function (r) {
             if (r.error) { toast("Kunde inte dela: " + r.error.message, true); btn.disabled = false; btn.textContent = "Dela utkast med kund"; return; }
             toast("Utkastet delat – kunden får ett mejl och ser det i portalen.");
-            loadBuildJobs();
+            loadBuildJobs(boxId, customerId);
           });
         });
       });
@@ -1985,7 +2012,7 @@
             sb.from("build_jobs").update({ brief: brief, status: "publishing", error: null }).eq("id", id).then(function (r) {
               if (r.error) { toast("Kunde inte starta publicering: " + r.error.message, true); btn.disabled = false; btn.textContent = "Publicera"; return; }
               toast("Publicering startad – " + domain + " går live inom kort.");
-              loadBuildJobs();
+              loadBuildJobs(boxId, customerId);
             });
           });
         });
@@ -2276,7 +2303,19 @@
           '<div class="addon-form-row"><div><label for="a-price">Pris (kr) *</label><input type="text" id="a-price" required placeholder="150"></div>' +
           '<div><label for="a-billing">Debitering</label><select id="a-billing"><option value="engang">Engång</option><option value="manad">Per månad</option></select></div></div>' +
           '<button type="submit" class="btn btn-primary btn-inline">Föreslå tillägg</button></form>' +
-          '<div id="admin-addons" style="margin-top:.8rem">' + adminAddonList(addons) + "</div>";
+          '<div id="admin-addons" style="margin-top:.8rem">' + adminAddonList(addons) + "</div>" +
+          '<hr style="margin:1.4rem 0;border:0;border-top:1px solid #e2e6e2">' +
+          '<details class="onb-build"><summary style="cursor:pointer;font-weight:600;padding:.5rem 0">🔧 Bygg sajt (utkast)</summary>' +
+          '<div style="margin-top:.6rem"><p class="muted onb-hint-sm">Förifyllt från kundens uppgifter — justera vid behov och bygg ett utkast. Jobbet kopplas automatiskt till den här kunden.</p>' +
+          buildFormHtml({
+            company: p.company || p.full_name || "",
+            slug: slugify(p.company || p.full_name || ""),
+            domain: (dm && dm.name) || site || "",
+            email: p.email || "",
+            about: brief ? brief.description : ""
+          }, false) +
+          '<h3 style="margin-top:1.2rem">Byggjobb för kunden</h3><div id="build-list"><div class="spinner"></div></div>' +
+          "</div></details>";
         if (n === 4) return '<label for="adm-website">Kundens sid-adress</label>' +
           '<div class="addon-form-row"><div style="flex:2"><input type="text" id="adm-website" value="' + esc(p.website || "") + '" placeholder="dinsajt.se"></div>' +
           '<div><button class="btn btn-ghost btn-inline" data-save-website="1">Spara adress</button></div></div>' +
@@ -2332,6 +2371,8 @@
       document.getElementById("btn-preview-portal").addEventListener("click", function () {
         window.open(location.origin + location.pathname + "?preview=" + encodeURIComponent(pid), "_blank");
       });
+      // Bygg-panelen i steg 3 (kund låst till denna kund)
+      if (document.getElementById("form-build")) wireBuildForm(pid, "build-list");
       Array.prototype.forEach.call(document.querySelectorAll("[data-req]"), function (btn) {
         btn.addEventListener("click", function () { renderDetail(Number(btn.getAttribute("data-req")), true); });
       });
