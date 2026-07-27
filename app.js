@@ -1764,14 +1764,12 @@
       };
       var btn = e.target.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Skapar jobb…";
+      // Insert räcker – en DB-trigger (dispatch_build_site) startar agenten automatiskt.
       sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief }).select().single().then(function (r) {
-        if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); btn.disabled = false; btn.textContent = "Bygg sajt"; return; }
-        sb.functions.invoke("dispatch-build", { body: { job_id: r.data.id } }).then(function (fr) {
-          if (fr && fr.error) toast("Jobb skapat, men agenten kunde inte startas: " + fr.error.message, true);
-          else toast("Bygget startat! Följ status nedan.");
-          btn.disabled = false; btn.textContent = "Bygg sajt";
-          e.target.reset(); loadBuildJobs();
-        });
+        btn.disabled = false; btn.textContent = "Bygg sajt";
+        if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); return; }
+        toast("Bygget startat! Följ status nedan.");
+        e.target.reset(); loadBuildJobs();
       });
     });
     loadBuildJobs();

@@ -49,4 +49,30 @@ drop policy if exists "build_jobs: admin hanterar" on public.build_jobs;
 create policy "build_jobs: admin hanterar" on public.build_jobs
   for all using (public.is_admin()) with check (public.is_admin());
 
--- Service role (edge/agent) förbigår RLS automatiskt.
+-- Dispatch till oakstride-agent vid nytt jobb (återanvänder Vault-nyckeln github_pat,
+-- samma mönster som dispatch_agent i migration-2). Ingen ny hemlighet behövs.
+create or replace function public.dispatch_build_site()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare pat text;
+begin
+  select decrypted_secret into pat from vault.decrypted_secrets where name = 'github_pat';
+  if pat is null then return new; end if;
+  begin
+    perform net.http_post(
+      url := 'https://api.github.com/repos/Lifewaver/oakstride-agent/dispatches',
+      body := jsonb_build_object('event_type', 'build-site',
+        'client_payload', jsonb_build_object('job_id', new.id)),
+      headers := jsonb_build_object(
+        'Authorization', 'Bearer ' || pat,
+        'Accept', 'application/vnd.github+json',
+        'Content-Type', 'application/json',
+        'User-Agent', 'oakstride-portal')
+    );
+  exception when others then null;
+  end;
+  return new;
+end; $$;
+
+drop trigger if exists build_jobs_dispatch on public.build_jobs;
+create trigger build_jobs_dispatch after insert on public.build_jobs
+  for each row execute function public.dispatch_build_site();
