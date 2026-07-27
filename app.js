@@ -1664,6 +1664,7 @@
     if (adminTab === "kunder") return renderAdminCustomers("kunder");
     if (adminTab === "nya") return renderAdminCustomers("nya");
     if (adminTab === "priser") return renderAdminPriser();
+    if (adminTab === "bygg") return renderAdminBuild();
     main.innerHTML =
       '<div class="page-head"><h1>Alla ärenden</h1>' +
       '<div class="filter-row"><select id="status-filter">' +
@@ -1702,6 +1703,96 @@
           toast("Priser sparade — villkoren uppdaterade.");
         });
       });
+    });
+  }
+
+  var SEGMENTS = [
+    ["hantverk", "Hantverk, Bygg & Service"], ["restaurang", "Restaurang, Café & Catering"],
+    ["butik", "Butik & Handel"], ["konsult", "Konsult & Professionella tjänster"],
+    ["media", "Media, Reklam & Kreativt"], ["skonhet", "Skönhet, Friskvård & Träning"],
+    ["halsa", "Hälsa & Vård"], ["djur", "Djur, Häst & Veterinär"],
+    ["fastighet", "Fastighet & Förvaltning"], ["transport", "Transport & Logistik"],
+    ["utbildning", "Utbildning & Förskola"], ["jordbruk", "Jordbruk, Odling & Livsmedel"],
+    ["industri", "Tillverkning & Industri"], ["besoksnaring", "Besöksnäring & Event"],
+    ["forening", "Förening, Kyrka & Ideellt"], ["ovrigt", "Övrigt"]
+  ];
+  var BUILD_STATUS = {
+    queued: "Köad", building: "Bygger…", preview_ready: "Förhandsvisning klar",
+    changes_requested: "Ändringar begärda", approved: "Godkänd", published: "Publicerad", failed: "Misslyckades"
+  };
+
+  function renderAdminBuild() {
+    main.innerHTML =
+      '<div class="page-head"><h1>Bygg sajt</h1></div>' +
+      '<p class="muted">Fyll i en kort brief så bygger agenten ett utkast (förhandsvisning). Du granskar och publicerar sedan själv.</p>' +
+      '<form id="form-build" class="card" style="max-width:680px;display:grid;gap:.75rem">' +
+        '<label>Företagsnamn<input id="b-company" required></label>' +
+        '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+"></label>' +
+        '<label>Segment<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
+        '<label>Domän (utan https)<input id="b-domain" placeholder="foretag.se"></label>' +
+        '<label>Nyckelfunktion<select id="b-key">' +
+          '<option value="offert">Offert</option><option value="bokning">Bokning</option>' +
+          '<option value="meny">Meny/bordsbokning</option><option value="ehandel">E-handel</option>' +
+          '<option value="kontakt">Kontakt</option></select></label>' +
+        '<label>Rubrik (hero)<input id="b-headline"></label>' +
+        '<label>Ingress (hero)<textarea id="b-lead" rows="2"></textarea></label>' +
+        '<label>Tjänster (en per rad: <em>Titel | kort beskrivning</em>)<textarea id="b-services" rows="4"></textarea></label>' +
+        '<label>Om oss<textarea id="b-about" rows="2"></textarea></label>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">' +
+          '<label>Telefon<input id="b-phone"></label><label>E-post<input id="b-email" type="email"></label></div>' +
+        '<label>Ort<input id="b-city"></label>' +
+        '<button type="submit" class="btn btn-primary btn-inline">Bygg sajt</button>' +
+      "</form>" +
+      '<h2 style="margin-top:1.6rem">Byggjobb</h2><div id="build-list"><div class="spinner"></div></div>';
+
+    document.getElementById("form-build").addEventListener("submit", function (e) {
+      e.preventDefault();
+      function v(id) { return (document.getElementById(id).value || "").trim(); }
+      var slug = v("b-slug"), company = v("b-company"), segment = v("b-segment");
+      if (!slug || !company) { toast("Fyll i minst företagsnamn och slug.", true); return; }
+      var services = v("b-services").split("\n").map(function (l) {
+        var p = l.split("|"); return p[0] && p[0].trim() ? { title: p[0].trim(), desc: (p[1] || "").trim() } : null;
+      }).filter(Boolean);
+      var brief = {
+        slug: slug, company: company, segment: segment,
+        domain: v("b-domain") || null, keyFunction: v("b-key"),
+        brand: { useSegmentPreset: true },
+        hero: { headline: v("b-headline") || company, lead: v("b-lead") },
+        services: services, about: v("b-about"),
+        contact: { phone: v("b-phone") || null, email: v("b-email") || null, address: { city: v("b-city") || null } },
+        analytics: { site: slug }
+      };
+      var btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true; btn.textContent = "Skapar jobb…";
+      sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief }).select().single().then(function (r) {
+        if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); btn.disabled = false; btn.textContent = "Bygg sajt"; return; }
+        sb.functions.invoke("dispatch-build", { body: { job_id: r.data.id } }).then(function (fr) {
+          if (fr && fr.error) toast("Jobb skapat, men agenten kunde inte startas: " + fr.error.message, true);
+          else toast("Bygget startat! Följ status nedan.");
+          btn.disabled = false; btn.textContent = "Bygg sajt";
+          e.target.reset(); loadBuildJobs();
+        });
+      });
+    });
+    loadBuildJobs();
+  }
+
+  function loadBuildJobs() {
+    var box = document.getElementById("build-list"); if (!box) return;
+    sb.from("build_jobs").select("*").order("created_at", { ascending: false }).limit(30).then(function (res) {
+      if (res.error) { box.innerHTML = '<div class="empty">' + esc(res.error.message) + "</div>"; return; }
+      var rows = res.data || [];
+      if (!rows.length) { box.innerHTML = '<div class="empty">Inga byggjobb ännu.</div>'; return; }
+      box.innerHTML = rows.map(function (j) {
+        return '<div class="card" style="margin-bottom:.8rem"><div class="page-head">' +
+          '<h3 style="margin:0">' + esc(j.company) + ' <span class="muted">· ' + esc(j.segment) + "</span></h3>" +
+          '<span class="chip">' + (BUILD_STATUS[j.status] || esc(j.status)) + "</span></div>" +
+          '<div class="detail-meta"><span>' + fmtDate(j.created_at) + "</span>" +
+          (j.preview_url ? '<span><a href="' + esc(j.preview_url) + '" target="_blank" rel="noopener">Förhandsvisning</a></span>' : "") +
+          (j.repo_url ? '<span><a href="' + esc(j.repo_url) + '" target="_blank" rel="noopener">Repo</a></span>' : "") +
+          (j.error ? '<span class="muted">' + esc(j.error) + "</span>" : "") +
+          "</div></div>";
+      }).join("");
     });
   }
 
