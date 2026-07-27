@@ -123,8 +123,10 @@
         "<h3>15. Avtalstid och uppsägning</h3>",
         "<p>Uppstartsprojektet avslutas vid godkänd leverans enligt punkt 6. Löpande drift &amp; support löper tills vidare och betalas månadsvis i förskott, med en (1) månads ömsesidig uppsägningstid. Uppsägning sker skriftligen (t.ex. via portalen eller e-post).</p>",
 
-        "<h3>16. Du äger din sajt — exit</h3>",
-        "<p>Efter full betalning äger du ditt innehåll (texter, bilder, varumärke, produktdata) och har obegränsad nyttjanderätt i tid till den levererade webbplatsen. Du är aldrig inlåst. Vid avtalets upphörande lämnar OakStride utan extra kostnad över en komplett kopia av webbplatsens filer och innehåll, domänen (registrerad i ditt namn eller överlåts till dig) samt rimlig dokumentation. Bistånd utöver detta debiteras per timme enligt punkt 10.</p>",
+        "<h3>16. Du äger din sajt och din domän — exit</h3>",
+        "<p>Efter full betalning äger du ditt innehåll (texter, bilder, varumärke, produktdata) och har obegränsad nyttjanderätt i tid till den levererade webbplatsen. Du är aldrig inlåst.</p>",
+        "<p><strong>Domän:</strong> din domän registreras med <strong>dig som innehavare (juridisk ägare) från start</strong>. OakStride står endast som teknisk förvaltare och sköter registrering, DNS och förnyelse åt dig via vår leverantör — du äger domänen under hela avtalstiden. Skulle en domän av praktiska skäl inledningsvis registrerats via OakStride överlåts den utan kostnad till dig på begäran.</p>",
+        "<p>Vid avtalets upphörande lämnar OakStride utan extra kostnad över full kontroll över domänen (inklusive ev. flytt till registrar du väljer) samt en komplett kopia av webbplatsens filer, innehåll och rimlig dokumentation. Bistånd utöver detta debiteras per timme enligt punkt 10.</p>",
 
         "<h3>17. Immateriella rättigheter</h3>",
         "<p>OakStride behåller rätten till generella verktyg, kodkomponenter och arbetsmetoder och får återanvända dessa i andra uppdrag; detta påverkar inte din nyttjanderätt enligt punkt 16. OakStride får ange dig som referens med länk och skärmbilder om du inte skriftligen avböjer.</p>",
@@ -1816,7 +1818,9 @@
   ];
   var BUILD_STATUS = {
     queued: "Köad", building: "Bygger…", preview_ready: "Förhandsvisning klar",
-    changes_requested: "Ändringar begärda", approved: "Godkänd", published: "Publicerad", failed: "Misslyckades"
+    changes_requested: "Ändringar begärda", approved: "Godkänd",
+    publishing: "Publicerar…", published: "Publicerad", publish_failed: "Publicering misslyckades",
+    failed: "Misslyckades"
   };
 
   function renderAdminBuild() {
@@ -1924,18 +1928,32 @@
       if (!rows.length) { box.innerHTML = '<div class="empty">Inga byggjobb ännu.</div>'; return; }
       box.innerHTML = rows.map(function (j) {
         var canShare = j.status === "preview_ready" && j.customer_id && !j.shared_at;
+        var canPublish = j.customer_id && j.shared_at &&
+          ["preview_ready", "changes_requested", "approved", "publish_failed"].indexOf(j.status) !== -1;
+        var domain = (j.brief && j.brief.domain) || "";
+        var actions = "";
+        if (canShare) actions += '<button class="btn btn-primary btn-inline" data-share="' + j.id + '">Dela utkast med kund</button> ';
+        if (canPublish) actions += '<button class="btn btn-primary btn-inline" data-publish="' + j.id + '"' +
+          (domain ? ' data-domain="' + esc(domain) + '"' : "") + ">" +
+          (j.status === "publish_failed" ? "F&ouml;rs&ouml;k publicera igen" : "Publicera") + "</button>";
+        if (j.status === "publishing") actions += '<span class="muted">Publicerar… (GitHub Pages + DNS)</span>';
+        if (j.status === "preview_ready" && !j.customer_id) actions = '<span class="muted">Koppla en kund vid bygget för att kunna dela.</span>';
+        var dnsNote = (j.status === "published" && j.dns_status && j.dns_status !== "ok" && j.dns_instructions)
+          ? '<details style="margin-top:.6rem"><summary class="muted">DNS sätts manuellt hos HostUp (rör ej e-post)</summary>' +
+            '<pre style="white-space:pre-wrap;font-size:.82rem;margin:.4rem 0 0">' + esc(j.dns_instructions) + "</pre></details>"
+          : "";
         return '<div class="card" style="margin-bottom:.8rem"><div class="page-head">' +
           '<h3 style="margin:0">' + esc(j.company) + ' <span class="muted">· ' + esc(j.segment) + "</span></h3>" +
           '<span class="chip">' + (BUILD_STATUS[j.status] || esc(j.status)) + "</span></div>" +
           '<div class="detail-meta"><span>' + fmtDate(j.created_at) + "</span>" +
+          (j.live_url ? '<span><a href="' + esc(j.live_url) + '" target="_blank" rel="noopener">Live &#8599;</a></span>' : "") +
           (j.preview_url ? '<span><a href="' + esc(j.preview_url) + '" target="_blank" rel="noopener">Förhandsvisning</a></span>' : "") +
           (j.repo_url ? '<span><a href="' + esc(j.repo_url) + '" target="_blank" rel="noopener">Repo</a></span>' : "") +
           (j.shared_at ? '<span class="chip">Delad med kund &#10003;</span>' : "") +
           (j.error ? '<span class="muted">' + esc(j.error) + "</span>" : "") +
           "</div>" +
-          (canShare
-            ? '<div style="margin-top:.7rem"><button class="btn btn-primary btn-inline" data-share="' + j.id + '">Dela utkast med kund</button></div>'
-            : (j.status === "preview_ready" && !j.customer_id ? '<div class="muted" style="margin-top:.5rem">Koppla en kund vid bygget för att kunna dela.</div>' : "")) +
+          (actions ? '<div style="margin-top:.7rem">' + actions + "</div>" : "") +
+          dnsNote +
           "</div>";
       }).join("");
       Array.prototype.forEach.call(box.querySelectorAll("[data-share]"), function (btn) {
@@ -1945,6 +1963,30 @@
             if (r.error) { toast("Kunde inte dela: " + r.error.message, true); btn.disabled = false; btn.textContent = "Dela utkast med kund"; return; }
             toast("Utkastet delat – kunden får ett mejl och ser det i portalen.");
             loadBuildJobs();
+          });
+        });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-publish]"), function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-publish");
+          var domain = btn.getAttribute("data-domain") || "";
+          if (!domain) {
+            domain = (window.prompt("Kundens domän för go-live (utan https, t.ex. foretag.se):", "") || "").trim()
+              .replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+            if (!domain) return;
+            if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) { toast("Ogiltig domän.", true); return; }
+          }
+          if (!window.confirm("Publicera live på " + domain + "?\n\nSajten går live på kundens egna domän. DNS uppdateras (endast webb-poster läggs till – MX/e-post lämnas orört).")) return;
+          btn.disabled = true; btn.textContent = "Publicerar…";
+          // Läs briefen, säkerställ att domänen finns i den, och sätt status=publishing (trigger startar agenten).
+          sb.from("build_jobs").select("brief").eq("id", id).single().then(function (g) {
+            var brief = (g && g.data && g.data.brief) || {};
+            brief.domain = domain;
+            sb.from("build_jobs").update({ brief: brief, status: "publishing", error: null }).eq("id", id).then(function (r) {
+              if (r.error) { toast("Kunde inte starta publicering: " + r.error.message, true); btn.disabled = false; btn.textContent = "Publicera"; return; }
+              toast("Publicering startad – " + domain + " går live inom kort.");
+              loadBuildJobs();
+            });
           });
         });
       });
