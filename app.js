@@ -984,6 +984,7 @@
         : "") +
       '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
       '<div id="onboarding-box"></div>' +
+      '<div id="draft-box"></div>' +
       '<div class="dash-grid">' +
         '<div class="card dash-site"><h2>Din hemsida</h2>' +
         (siteUrl
@@ -1016,6 +1017,30 @@
     loadRequests(false);
     loadStats(site);
     loadOnboarding();
+    loadDraft(cp.id);
+  }
+
+  // Delat webbplatsutkast (från "Bygg sajt"/agenten) i kundvyn
+  function loadDraft(customerId) {
+    var box = document.getElementById("draft-box");
+    if (!box || !customerId) return;
+    sb.from("build_jobs").select("preview_url, shared_at").eq("customer_id", customerId)
+      .not("shared_at", "is", null).order("shared_at", { ascending: false }).limit(1)
+      .then(function (res) {
+        if (res.error || !res.data || !res.data.length) return;
+        var j = res.data[0];
+        if (!j.preview_url) return;
+        box.innerHTML =
+          '<div class="card" style="border:2px solid #1e3a2f;margin-bottom:1.2rem">' +
+          '<div class="page-head"><h2 style="margin:0">&#10024; Ditt webbplatsutkast är klart!</h2></div>' +
+          '<p class="muted">Titta igenom ditt utkast. Vill du ändra något &ndash; text, bilder eller upplägg &ndash; beskriv det via &rdquo;Önska en ändring&rdquo;, så tar vår AI-assistent hand om det.</p>' +
+          '<div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.4rem">' +
+          '<a class="btn btn-primary btn-inline" href="' + esc(j.preview_url) + '" target="_blank" rel="noopener">Öppna utkast &rarr;</a>' +
+          '<button id="btn-draft-change" class="btn btn-google btn-inline">Önska en ändring</button>' +
+          "</div></div>";
+        var b = document.getElementById("btn-draft-change");
+        if (b) b.addEventListener("click", renderNewRequestForm);
+      });
   }
 
   // Öppnar innehåll i ett eget fönster med portalens stilmall (kravspec, villkor).
@@ -1726,6 +1751,7 @@
       '<div class="page-head"><h1>Bygg sajt</h1></div>' +
       '<p class="muted">Fyll i en kort brief så bygger agenten ett utkast (förhandsvisning). Du granskar och publicerar sedan själv.</p>' +
       '<form id="form-build" class="card" style="max-width:680px;display:grid;gap:.75rem">' +
+        '<label>Kund<select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select></label>' +
         '<label>Företagsnamn<input id="b-company" required></label>' +
         '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+"></label>' +
         '<label>Segment<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
@@ -1762,14 +1788,26 @@
         contact: { phone: v("b-phone") || null, email: v("b-email") || null, address: { city: v("b-city") || null } },
         analytics: { site: slug }
       };
+      var customer_id = v("b-customer") || null;
       var btn = e.target.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Skapar jobb…";
       // Insert räcker – en DB-trigger (dispatch_build_site) startar agenten automatiskt.
-      sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief }).select().single().then(function (r) {
+      sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief, customer_id: customer_id }).select().single().then(function (r) {
         btn.disabled = false; btn.textContent = "Bygg sajt";
         if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); return; }
         toast("Bygget startat! Följ status nedan.");
         e.target.reset(); loadBuildJobs();
+      });
+    });
+    // Ladda kunder till dropdownen
+    sb.from("profiles").select("id, company, full_name, email").eq("is_admin", false).order("company", { ascending: true }).then(function (res) {
+      var sel = document.getElementById("b-customer");
+      if (!sel || res.error || !res.data) return;
+      res.data.forEach(function (p) {
+        var o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.company || p.full_name || p.email || p.id;
+        sel.appendChild(o);
       });
     });
     loadBuildJobs();
@@ -1782,15 +1820,31 @@
       var rows = res.data || [];
       if (!rows.length) { box.innerHTML = '<div class="empty">Inga byggjobb ännu.</div>'; return; }
       box.innerHTML = rows.map(function (j) {
+        var canShare = j.status === "preview_ready" && j.customer_id && !j.shared_at;
         return '<div class="card" style="margin-bottom:.8rem"><div class="page-head">' +
           '<h3 style="margin:0">' + esc(j.company) + ' <span class="muted">· ' + esc(j.segment) + "</span></h3>" +
           '<span class="chip">' + (BUILD_STATUS[j.status] || esc(j.status)) + "</span></div>" +
           '<div class="detail-meta"><span>' + fmtDate(j.created_at) + "</span>" +
           (j.preview_url ? '<span><a href="' + esc(j.preview_url) + '" target="_blank" rel="noopener">Förhandsvisning</a></span>' : "") +
           (j.repo_url ? '<span><a href="' + esc(j.repo_url) + '" target="_blank" rel="noopener">Repo</a></span>' : "") +
+          (j.shared_at ? '<span class="chip">Delad med kund &#10003;</span>' : "") +
           (j.error ? '<span class="muted">' + esc(j.error) + "</span>" : "") +
-          "</div></div>";
+          "</div>" +
+          (canShare
+            ? '<div style="margin-top:.7rem"><button class="btn btn-primary btn-inline" data-share="' + j.id + '">Dela utkast med kund</button></div>'
+            : (j.status === "preview_ready" && !j.customer_id ? '<div class="muted" style="margin-top:.5rem">Koppla en kund vid bygget för att kunna dela.</div>' : "")) +
+          "</div>";
       }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll("[data-share]"), function (btn) {
+        btn.addEventListener("click", function () {
+          btn.disabled = true; btn.textContent = "Delar…";
+          sb.from("build_jobs").update({ shared_at: new Date().toISOString() }).eq("id", btn.getAttribute("data-share")).then(function (r) {
+            if (r.error) { toast("Kunde inte dela: " + r.error.message, true); btn.disabled = false; btn.textContent = "Dela utkast med kund"; return; }
+            toast("Utkastet delat – kunden får ett mejl och ser det i portalen.");
+            loadBuildJobs();
+          });
+        });
+      });
     });
   }
 
