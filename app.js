@@ -1820,6 +1820,7 @@
   };
 
   function renderAdminBuild() {
+    var TEMPLATES = {}, currentExtra = [];
     main.innerHTML =
       '<div class="page-head"><h1>Bygg sajt</h1></div>' +
       '<p class="muted">Fyll i en kort brief så bygger agenten ett utkast (förhandsvisning). Du granskar och publicerar sedan själv.</p>' +
@@ -1827,7 +1828,9 @@
         '<label>Kund<select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select></label>' +
         '<label>Företagsnamn<input id="b-company" required></label>' +
         '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+"></label>' +
-        '<label>Segment<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
+        '<label>Segment (färg/tema)<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
+        '<label>Grundmall (layout)<select id="b-template"><option value="generisk">Generisk</option></select></label>' +
+        '<div id="b-extra" style="display:grid;gap:.75rem"></div>' +
         '<label>Domän (utan https)<input id="b-domain" placeholder="foretag.se"></label>' +
         '<label>Nyckelfunktion<select id="b-key">' +
           '<option value="offert">Offert</option><option value="bokning">Bokning</option>' +
@@ -1861,6 +1864,11 @@
         contact: { phone: v("b-phone") || null, email: v("b-email") || null, address: { city: v("b-city") || null } },
         analytics: { site: slug }
       };
+      brief.template = v("b-template") || "generisk";
+      currentExtra.forEach(function (f) {
+        var el = document.getElementById("bx-" + f.key);
+        if (el && (el.value || "").trim()) brief[f.key] = el.value.trim();
+      });
       var customer_id = v("b-customer") || null;
       var btn = e.target.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Skapar jobb…";
@@ -1882,6 +1890,28 @@
         o.textContent = p.company || p.full_name || p.email || p.id;
         sel.appendChild(o);
       });
+    });
+    // Ladda grundmallar + dynamiska mall-specifika fält
+    function renderExtra() {
+      var key = (document.getElementById("b-template") || {}).value || "generisk";
+      var def = TEMPLATES[key];
+      currentExtra = (def && def.extra_fields) || [];
+      var box = document.getElementById("b-extra");
+      if (!box) return;
+      box.innerHTML = currentExtra.map(function (f) {
+        var field = (f.type === "lines" || f.type === "textarea")
+          ? '<textarea id="bx-' + esc(f.key) + '" rows="4"' + (f.hint ? ' placeholder="' + esc(f.hint) + '"' : "") + "></textarea>"
+          : '<input id="bx-' + esc(f.key) + '"' + (f.hint ? ' placeholder="' + esc(f.hint) + '"' : "") + ">";
+        return "<label>" + esc(f.label) + field + "</label>";
+      }).join("");
+    }
+    sb.from("site_templates").select("*").eq("active", true).order("sort", { ascending: true }).then(function (res) {
+      var sel = document.getElementById("b-template");
+      if (sel && !res.error && res.data && res.data.length) {
+        sel.innerHTML = res.data.map(function (t) { TEMPLATES[t.key] = t; return '<option value="' + esc(t.key) + '">' + esc(t.label) + "</option>"; }).join("");
+        sel.addEventListener("change", renderExtra);
+      }
+      renderExtra();
     });
     loadBuildJobs();
   }
