@@ -984,6 +984,8 @@
         : "") +
       '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
       '<div id="onboarding-box"></div>' +
+      '<div id="draft-box"></div>' +
+      '<div id="uploads-box"></div>' +
       '<div class="dash-grid">' +
         '<div class="card dash-site"><h2>Din hemsida</h2>' +
         (siteUrl
@@ -1016,6 +1018,98 @@
     loadRequests(false);
     loadStats(site);
     loadOnboarding();
+    loadDraft(cp.id);
+    loadUploads(cp.id);
+  }
+
+  // Delat webbplatsutkast (från "Bygg sajt"/agenten) i kundvyn
+  function loadDraft(customerId) {
+    var box = document.getElementById("draft-box");
+    if (!box || !customerId) return;
+    sb.from("build_jobs").select("preview_url, shared_at").eq("customer_id", customerId)
+      .not("shared_at", "is", null).order("shared_at", { ascending: false }).limit(1)
+      .then(function (res) {
+        if (res.error || !res.data || !res.data.length) return;
+        var j = res.data[0];
+        if (!j.preview_url) return;
+        box.innerHTML =
+          '<div class="card" style="border:2px solid #1e3a2f;margin-bottom:1.2rem">' +
+          '<div class="page-head"><h2 style="margin:0">&#10024; Ditt webbplatsutkast är klart!</h2></div>' +
+          '<p class="muted">Titta igenom ditt utkast. Vill du ändra något &ndash; text, bilder eller upplägg &ndash; beskriv det via &rdquo;Önska en ändring&rdquo;, så tar vår AI-assistent hand om det.</p>' +
+          '<div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.4rem">' +
+          '<a class="btn btn-primary btn-inline" href="' + esc(j.preview_url) + '" target="_blank" rel="noopener">Öppna utkast &rarr;</a>' +
+          '<button id="btn-draft-change" class="btn btn-google btn-inline">Önska en ändring</button>' +
+          "</div></div>";
+        var b = document.getElementById("btn-draft-change");
+        if (b) b.addEventListener("click", renderNewRequestForm);
+      });
+  }
+
+  // Kundens bilduppladdning (Supabase Storage: customer-uploads/<uid>/)
+  function loadUploads(customerId) {
+    var box = document.getElementById("uploads-box");
+    if (!box || !customerId) return;
+    var bucket = sb.storage.from("customer-uploads");
+    box.innerHTML =
+      '<div class="card" style="margin-bottom:1.2rem"><div class="page-head"><h2 style="margin:0">&#128247; Dina bilder</h2></div>' +
+      '<p class="muted">Ladda upp foton och er logga. Be sedan AI:n använda dem via &rdquo;Använd i en ändring&rdquo;.</p>' +
+      '<input type="file" id="up-input" accept="image/*" multiple style="margin:.4rem 0 1rem">' +
+      '<div id="up-status" class="status-note" hidden></div>' +
+      '<div id="up-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.6rem"></div></div>';
+
+    function renderGallery() {
+      var g = document.getElementById("up-gallery");
+      if (!g) return;
+      g.innerHTML = '<div class="spinner"></div>';
+      bucket.list(customerId, { sortBy: { column: "created_at", order: "desc" } }).then(function (res) {
+        if (res.error) { g.innerHTML = '<div class="empty">' + esc(res.error.message) + "</div>"; return; }
+        var files = (res.data || []).filter(function (f) { return f.name && f.name.charAt(0) !== "."; });
+        if (!files.length) { g.innerHTML = '<div class="empty">Inga bilder uppladdade ännu.</div>'; return; }
+        g.innerHTML = files.map(function (f) {
+          var path = customerId + "/" + f.name;
+          var url = bucket.getPublicUrl(path).data.publicUrl;
+          return '<div style="border:1px solid #e3e3e3;border-radius:8px;overflow:hidden">' +
+            '<img src="' + esc(url) + '" alt="" style="width:100%;height:90px;object-fit:cover;display:block">' +
+            '<div style="padding:.4rem;display:flex;flex-direction:column;gap:.3rem">' +
+            '<button class="btn btn-google btn-sm" data-useimg="' + esc(url) + '">Använd i en ändring</button>' +
+            '<button class="linklike" data-delimg="' + esc(path) + '" style="font-size:.8rem">Ta bort</button>' +
+            "</div></div>";
+        }).join("");
+        Array.prototype.forEach.call(g.querySelectorAll("[data-useimg]"), function (btn) {
+          btn.addEventListener("click", function () {
+            renderNewRequestForm({ title: "Använd uppladdad bild", desc: "Använd den här bilden på min sida:\n" + btn.getAttribute("data-useimg") + "\n\n(Beskriv gärna var den ska visas.)" });
+          });
+        });
+        Array.prototype.forEach.call(g.querySelectorAll("[data-delimg]"), function (btn) {
+          btn.addEventListener("click", function () {
+            if (!window.confirm("Ta bort bilden?")) return;
+            bucket.remove([btn.getAttribute("data-delimg")]).then(function () { renderGallery(); });
+          });
+        });
+      });
+    }
+
+    document.getElementById("up-input").addEventListener("change", function (e) {
+      if (typeof previewBlocked === "function" && previewBlocked()) return;
+      var files = Array.prototype.slice.call(e.target.files || []);
+      if (!files.length) return;
+      var st = document.getElementById("up-status");
+      st.hidden = false; st.textContent = "Laddar upp…";
+      var done = 0, errs = 0;
+      files.forEach(function (file) {
+        var safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        var path = customerId + "/" + Date.now() + "-" + safe;
+        bucket.upload(path, file, { upsert: false }).then(function (r) {
+          done++; if (r.error) errs++;
+          if (done === files.length) {
+            st.textContent = errs ? (errs + " bild(er) kunde inte laddas upp.") : "Uppladdat!";
+            setTimeout(function () { st.hidden = true; }, 2500);
+            e.target.value = ""; renderGallery();
+          }
+        });
+      });
+    });
+    renderGallery();
   }
 
   // Öppnar innehåll i ett eget fönster med portalens stilmall (kravspec, villkor).
@@ -1443,7 +1537,7 @@
     });
   }
 
-  function renderNewRequestForm() {
+  function renderNewRequestForm(prefill) {
     main.innerHTML =
       '<button class="back-link" id="btn-back">&larr; Tillbaka till dina ärenden</button>' +
       '<div class="card"><h1>Nytt ärende</h1>' +
@@ -1461,6 +1555,10 @@
       '<textarea id="f-desc" required placeholder="Beskriv ändringen så tydligt du kan. Länka gärna till bilder eller texter."></textarea>' +
       '<button type="submit" class="btn btn-primary">Skicka förfrågan</button>' +
       "</form></div>";
+    if (prefill && !prefill.target) {
+      if (prefill.title) document.getElementById("f-title").value = prefill.title;
+      if (prefill.desc) document.getElementById("f-desc").value = prefill.desc;
+    }
     document.getElementById("btn-back").addEventListener("click", renderCustomer);
     document.getElementById("form-req").addEventListener("submit", function (e) {
       e.preventDefault();
@@ -1726,6 +1824,7 @@
       '<div class="page-head"><h1>Bygg sajt</h1></div>' +
       '<p class="muted">Fyll i en kort brief så bygger agenten ett utkast (förhandsvisning). Du granskar och publicerar sedan själv.</p>' +
       '<form id="form-build" class="card" style="max-width:680px;display:grid;gap:.75rem">' +
+        '<label>Kund<select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select></label>' +
         '<label>Företagsnamn<input id="b-company" required></label>' +
         '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+"></label>' +
         '<label>Segment<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '">' + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
@@ -1762,14 +1861,26 @@
         contact: { phone: v("b-phone") || null, email: v("b-email") || null, address: { city: v("b-city") || null } },
         analytics: { site: slug }
       };
+      var customer_id = v("b-customer") || null;
       var btn = e.target.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Skapar jobb…";
       // Insert räcker – en DB-trigger (dispatch_build_site) startar agenten automatiskt.
-      sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief }).select().single().then(function (r) {
+      sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief, customer_id: customer_id }).select().single().then(function (r) {
         btn.disabled = false; btn.textContent = "Bygg sajt";
         if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); return; }
         toast("Bygget startat! Följ status nedan.");
         e.target.reset(); loadBuildJobs();
+      });
+    });
+    // Ladda kunder till dropdownen
+    sb.from("profiles").select("id, company, full_name, email").eq("is_admin", false).order("company", { ascending: true }).then(function (res) {
+      var sel = document.getElementById("b-customer");
+      if (!sel || res.error || !res.data) return;
+      res.data.forEach(function (p) {
+        var o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.company || p.full_name || p.email || p.id;
+        sel.appendChild(o);
       });
     });
     loadBuildJobs();
@@ -1782,15 +1893,31 @@
       var rows = res.data || [];
       if (!rows.length) { box.innerHTML = '<div class="empty">Inga byggjobb ännu.</div>'; return; }
       box.innerHTML = rows.map(function (j) {
+        var canShare = j.status === "preview_ready" && j.customer_id && !j.shared_at;
         return '<div class="card" style="margin-bottom:.8rem"><div class="page-head">' +
           '<h3 style="margin:0">' + esc(j.company) + ' <span class="muted">· ' + esc(j.segment) + "</span></h3>" +
           '<span class="chip">' + (BUILD_STATUS[j.status] || esc(j.status)) + "</span></div>" +
           '<div class="detail-meta"><span>' + fmtDate(j.created_at) + "</span>" +
           (j.preview_url ? '<span><a href="' + esc(j.preview_url) + '" target="_blank" rel="noopener">Förhandsvisning</a></span>' : "") +
           (j.repo_url ? '<span><a href="' + esc(j.repo_url) + '" target="_blank" rel="noopener">Repo</a></span>' : "") +
+          (j.shared_at ? '<span class="chip">Delad med kund &#10003;</span>' : "") +
           (j.error ? '<span class="muted">' + esc(j.error) + "</span>" : "") +
-          "</div></div>";
+          "</div>" +
+          (canShare
+            ? '<div style="margin-top:.7rem"><button class="btn btn-primary btn-inline" data-share="' + j.id + '">Dela utkast med kund</button></div>'
+            : (j.status === "preview_ready" && !j.customer_id ? '<div class="muted" style="margin-top:.5rem">Koppla en kund vid bygget för att kunna dela.</div>' : "")) +
+          "</div>";
       }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll("[data-share]"), function (btn) {
+        btn.addEventListener("click", function () {
+          btn.disabled = true; btn.textContent = "Delar…";
+          sb.from("build_jobs").update({ shared_at: new Date().toISOString() }).eq("id", btn.getAttribute("data-share")).then(function (r) {
+            if (r.error) { toast("Kunde inte dela: " + r.error.message, true); btn.disabled = false; btn.textContent = "Dela utkast med kund"; return; }
+            toast("Utkastet delat – kunden får ett mejl och ser det i portalen.");
+            loadBuildJobs();
+          });
+        });
+      });
     });
   }
 
