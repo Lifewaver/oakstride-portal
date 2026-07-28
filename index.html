@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=63">
+<link rel="stylesheet" href="styles.css?v=64">
 </head>
 <body>
 
@@ -103,6 +103,15 @@
         <button class="tab" data-tab="priser">Priser</button>
         <button class="tab" data-tab="bygg">Byggjobb</button>
       </nav>
+      <nav id="cust-nav" class="tabs cust-tabs" hidden>
+        <button class="tab active" data-ctab="oversikt">Översikt</button>
+        <button class="tab" data-ctab="resa">Min resa</button>
+        <button class="tab" data-ctab="uppdatera">Uppdatera sajten</button>
+        <button class="tab" data-ctab="sajt">Min hemsida</button>
+        <button class="tab" data-ctab="statistik">Statistik</button>
+        <button class="tab" data-ctab="avtal">Avtal &amp; priser</button>
+        <button class="tab" data-ctab="support">Support</button>
+      </nav>
       <div class="user-box">
         <span id="user-email" class="user-email"></span>
         <button id="btn-viewas" class="btn btn-ghost btn-sm" hidden>Visa som kund</button>
@@ -119,7 +128,7 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=63"></script>
-<script src="app.js?v=63"></script>
+<script src="config.js?v=64"></script>
+<script src="app.js?v=64"></script>
 </body>
 </html>
