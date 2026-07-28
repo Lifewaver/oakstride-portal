@@ -185,6 +185,18 @@ form .btn{margin-top:1rem}
 @media (max-width:700px){.dash-grid{grid-template-columns:1fr}}
 .dash-grid .card{margin:0}
 .dash-reqs,.dash-contact{margin-bottom:1rem}
+/* Nästa steg-kort på Översikt */
+.onb-next{margin-bottom:1rem;border-left:5px solid var(--moss)}
+.onb-next h2{margin:.15rem 0 .35rem;font-size:1.35rem}
+.onb-next .onb-next-hint{margin:0 0 .9rem;max-width:60ch}
+.onb-next-eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--moss);font-weight:500}
+.onb-next-actions{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.onb-next-you{border-left-color:var(--acorn);background:linear-gradient(180deg,rgba(47,100,134,.06),transparent 60%)}
+.onb-next-you .onb-next-eyebrow{color:var(--acorn)}
+.onb-next-oak{border-left-color:#c78a3e;background:linear-gradient(180deg,rgba(199,138,62,.07),transparent 60%)}
+.onb-next-oak .onb-next-eyebrow{color:#a56a24}
+.onb-next-done{border-left-color:#1e7a4b;background:linear-gradient(180deg,rgba(30,122,75,.07),transparent 60%)}
+.onb-next-done .onb-next-eyebrow{color:#1e7a4b}
 .site-thumb{width:100%;aspect-ratio:16/10;overflow:hidden;border-radius:10px;border:1px solid var(--line);margin-bottom:.6rem;background:#fff}
 .site-thumb iframe{width:400%;height:400%;transform:scale(.25);transform-origin:0 0;border:0;pointer-events:none}
 .site-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem}
