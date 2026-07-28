@@ -1031,8 +1031,9 @@
       html = '<h1 class="dash-title">Uppdatera sajten</h1>' +
         '<p class="muted">Se din sajt och chatta med AI-agenten — beskriv vad du vill ändra så tar den fram ett utkast som OakStride granskar och publicerar. Ingår i din månadsavgift.</p>' +
         '<div class="upd-grid">' + sitePreviewCard() + '<div id="aichat" class="aichat"><div class="spinner"></div></div></div>' +
+        '<div id="uploads-box"></div>' +
         '<div id="draft-box"></div>';
-      after = function () { loadAIChat(cp); loadDraft(cp.id); };
+      after = function () { loadAIChat(cp); loadUploads(cp.id, true); loadDraft(cp.id); };
     } else if (custTab === "statistik") {
       html = '<h1 class="dash-title">Besökare</h1>' +
         '<p class="muted">Anonym, cookiefri besöksstatistik för din sajt — så du ser att den gör nytta.</p>' +
@@ -1210,13 +1211,17 @@
   }
 
   // Kundens bilduppladdning (Supabase Storage: customer-uploads/<uid>/)
-  function loadUploads(customerId) {
+  // useInChat=true: "Använd"-knappen lägger bilden i AI-chatten i stället för i ett nytt formulär.
+  function loadUploads(customerId, useInChat) {
     var box = document.getElementById("uploads-box");
     if (!box || !customerId) return;
     var bucket = sb.storage.from("customer-uploads");
+    var useLabel = useInChat ? "Använd i chatten" : "Använd i en ändring";
     box.innerHTML =
       '<div class="card" style="margin-bottom:1.2rem"><div class="page-head"><h2 style="margin:0">&#128247; Dina bilder</h2></div>' +
-      '<p class="muted">Ladda upp foton och er logga. Be sedan AI:n använda dem via &rdquo;Använd i en ändring&rdquo;.</p>' +
+      '<p class="muted">Ladda upp foton och er logga. ' + (useInChat
+        ? 'Klicka <em>Använd i chatten</em> på en bild så läggs den in i ändringen &ndash; beskriv sedan var den ska visas.'
+        : 'Be sedan AI:n använda dem via &rdquo;Använd i en ändring&rdquo;.') + '</p>' +
       '<input type="file" id="up-input" accept="image/*" multiple style="margin:.4rem 0 1rem">' +
       '<div id="up-status" class="status-note" hidden></div>' +
       '<div id="up-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:.6rem"></div></div>';
@@ -1235,13 +1240,23 @@
           return '<div style="border:1px solid #e3e3e3;border-radius:8px;overflow:hidden">' +
             '<img src="' + esc(url) + '" alt="" style="width:100%;height:90px;object-fit:cover;display:block">' +
             '<div style="padding:.4rem;display:flex;flex-direction:column;gap:.3rem">' +
-            '<button class="btn btn-google btn-sm" data-useimg="' + esc(url) + '">Använd i en ändring</button>' +
+            '<button class="btn btn-google btn-sm" data-useimg="' + esc(url) + '">' + useLabel + '</button>' +
             '<button class="linklike" data-delimg="' + esc(path) + '" style="font-size:.8rem">Ta bort</button>' +
             "</div></div>";
         }).join("");
         Array.prototype.forEach.call(g.querySelectorAll("[data-useimg]"), function (btn) {
           btn.addEventListener("click", function () {
-            renderNewRequestForm({ title: "Använd uppladdad bild", desc: "Använd den här bilden på min sida:\n" + btn.getAttribute("data-useimg") + "\n\n(Beskriv gärna var den ska visas.)" });
+            var u = btn.getAttribute("data-useimg");
+            var ta = useInChat ? document.getElementById("aichat-msg") : null;
+            if (ta) {
+              var pre = (ta.value || "").trim();
+              ta.value = (pre ? pre + "\n" : "") + "Använd den här bilden: " + u + "\n(Beskriv gärna var den ska visas.)";
+              ta.focus();
+              try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+              toast("Bilden är inlagd i chatten — beskriv var den ska användas.");
+            } else {
+              renderNewRequestForm({ title: "Använd uppladdad bild", desc: "Använd den här bilden på min sida:\n" + u + "\n\n(Beskriv gärna var den ska visas.)" });
+            }
           });
         });
         Array.prototype.forEach.call(g.querySelectorAll("[data-delimg]"), function (btn) {
