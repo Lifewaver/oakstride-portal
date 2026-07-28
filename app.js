@@ -43,7 +43,7 @@
   function buildAgreement(p) {
     var site = fmtKr(p.site_price), drift = fmtKr(p.drift_month), setup = fmtKr(p.rate_setup), change = fmtKr(p.rate_change);
     return {
-      version: "2026-07-28-r2-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
+      version: "2026-07-28-r3-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
       title: "OakStrides kundvillkor",
       html: [
         "<h3>1. Om villkoren och avtalet</h3>",
@@ -76,9 +76,9 @@
 
         "<h3>7. Löpande drift &amp; support</h3>",
         "<p>Löpande drift är en enda nivå till fast månadsavgift enligt punkt 10 och omfattar hosting och övervakning, förnyelse av domän och DNS-skötsel, HTTPS-certifikat, plattforms- och säkerhetsuppdateringar, säkerhetskopiering av innehåll, din personliga inloggning i kundportalen samt <strong>löpande innehållsändringar via vår AI-agent</strong> enligt nedan. Support på system som inte levererats av OakStride samt tredjepartskostnader ingår inte.</p>",
-        "<p><strong>Innehållsändringar via AI-agenten (ingår):</strong> i portalen kan du chatta med OakStrides AI-agent och be om löpande innehållsändringar — t.ex. justera texter, byta bilder, uppdatera priser eller öppettider och publicera nyheter/inlägg. AI-agenten tar fram ändringen som ett utkast; <strong>en människa på OakStride granskar och publicerar alltid innan något går live</strong>. I månadsavgiften ingår upp till <strong>femton (15) innehållsändringar och/eller cirka 200 000 tokens per månad</strong> (ett publiceringstillfälle kan omfatta flera samlade ändringar). När något av dessa två tak nås pausas ytterligare AI-ändringar till nästa månad, eller offereras per timme enligt punkt 10. Outnyttjat utrymme sparas inte till nästa månad.</p>",
-        "<p><strong>Vad som räknas som innehållsändring — skälig användning:</strong> det som ingår avser normal, löpande innehållsvård av din befintliga webbplats. AI-agenten ska användas i skälig omfattning inom ovan angivna tak (femton (15) ändringar och/eller cirka 200 000 tokens per månad); ovanligt omfattande eller upprepad användning (t.ex. mycket stora mängder genererat innehåll eller upprepade omtag långt utöver normal drift) räknas inte som löpande innehållsändring och kan begränsas eller debiteras per timme enligt punkt 10.</p>",
-        "<p><strong>Debiteras alltid per timme enligt punkt 10:</strong> nya sidor eller undersidor utöver levererad struktur; ny funktionalitet och integrationer (t.ex. bokning, e-handel, formulär, kopplingar till andra system); design- och strukturändringar/omdesign; innehållsändringar utöver de femton (15) ändringar och/eller cirka 200 000 tokens per månad som ingår; samt annat arbete som kräver OakStrides egen hand utöver AI-genererade innehållsändringar.</p>",
+        "<p><strong>Innehållsändringar via AI-agenten (ingår):</strong> i portalen kan du chatta med OakStrides AI-agent och be om löpande innehållsändringar — t.ex. justera texter, byta bilder, uppdatera priser eller öppettider och publicera nyheter/inlägg. AI-agenten tar fram ändringen som ett utkast; <strong>en människa på OakStride granskar och publicerar alltid innan något går live</strong>. I månadsavgiften ingår att du kan begära upp till <strong>femton (15) innehållsändringar per månad via AI-agenten, varav upp till fem (5) genomgår mänsklig granskning och publiceras</strong> — alternativt en förbrukning på upp till <strong>cirka 200 000 tokens per månad</strong>; det av gränserna som först nås gäller. Ett publiceringstillfälle kan omfatta flera samlade ändringar, och outnyttjat utrymme sparas inte till nästa månad. Behöver du göra mer än så avropar du <strong>konsulttimmar</strong>, som stäms av vid behov och debiteras per timme enligt punkt 10.</p>",
+        "<p><strong>Vad som räknas som innehållsändring — skälig användning:</strong> det som ingår avser normal, löpande innehållsvård av din befintliga webbplats. AI-agenten ska användas i skälig omfattning inom ovan angivna tak (femton (15) ändringar, varav fem (5) granskade och publicerade, och/eller cirka 200 000 tokens per månad); ovanligt omfattande eller upprepad användning (t.ex. mycket stora mängder genererat innehåll eller upprepade omtag långt utöver normal drift) räknas inte som löpande innehållsändring och kan begränsas eller debiteras per timme enligt punkt 10.</p>",
+        "<p><strong>Debiteras alltid per timme enligt punkt 10:</strong> nya sidor eller undersidor utöver levererad struktur; ny funktionalitet och integrationer (t.ex. bokning, e-handel, formulär, kopplingar till andra system); design- och strukturändringar/omdesign; innehållsändringar och mänsklig granskning/publicering utöver de tak som ingår enligt ovan (avropas som konsulttimmar och stäms av vid behov); samt annat arbete som kräver OakStrides egen hand utöver AI-genererade innehållsändringar.</p>",
 
         "<h3>8. Servicenivåer</h3>",
         "<p>Vi påbörjar åtgärd inom följande tider (vardagar 09–17):</p>",
@@ -91,12 +91,12 @@
         "<p>Planerade servicefönster förläggs utanför kontorstid och aviseras i förväg när avbrott kan märkas.</p>",
 
         "<h3>9. Så beställer du ändringar</h3>",
-        "<p>Löpande innehållsändringar begär du enklast genom att chatta med AI-agenten i kundportalen — den tar fram ett utkast med förhandsvisningslänk. <strong>Ingenting publiceras på din webbplats utan vår slutkontroll och ditt godkännande i portalen.</strong> Sådana innehållsändringar ingår i driften upp till femton (15) ändringar och/eller cirka 200 000 tokens per månad enligt punkt 7. Större ändringar och arbete därutöver får du en tidsuppskattning för och debiteras per timme enligt punkt 10; medför en ändring en ny engångskostnad presenteras den som en uppdaterad kravspecifikation som du godkänner innan arbetet påbörjas.</p>",
+        "<p>Löpande innehållsändringar begär du enklast genom att chatta med AI-agenten i kundportalen — den tar fram ett utkast med förhandsvisningslänk. <strong>Ingenting publiceras på din webbplats utan vår slutkontroll och ditt godkännande i portalen.</strong> Sådana innehållsändringar ingår enligt taken i punkt 7 (upp till femton (15) ändringar/mån, varav fem (5) granskade och publicerade, alternativt ca 200 000 tokens/mån). Behöver du mer avropar du konsulttimmar som stäms av vid behov; du får en tidsuppskattning och det debiteras per timme enligt punkt 10; medför en ändring en ny engångskostnad presenteras den som en uppdaterad kravspecifikation som du godkänner innan arbetet påbörjas.</p>",
 
         "<h3>10. Priser (exkl. moms)</h3>",
         "<p>Samtliga priser anges exklusive moms.</p>",
         "<ul><li><strong>Standardwebbplats:</strong> " + site + " kr som engångskostnad, faktureras vid beställning.</li>" +
-        "<li><strong>Löpande drift:</strong> " + drift + " kr/mån — hosting, DNS- och domänskötsel, certifikat, säkerhet, säkerhetskopiering, tillgång till kundportalen samt löpande innehållsändringar via AI-agenten (upp till 15 ändringar och/eller ca 200 000 tokens/mån enligt punkt 7). Större ändringar och arbete därutöver debiteras per timme.</li>" +
+        "<li><strong>Löpande drift:</strong> " + drift + " kr/mån — hosting, DNS- och domänskötsel, certifikat, säkerhet, säkerhetskopiering, tillgång till kundportalen samt löpande innehållsändringar via AI-agenten (upp till 15 ändringar/mån, varav 5 granskade och publicerade, alternativt ca 200 000 tokens/mån enligt punkt 7). Mer arbete därutöver avropas som konsulttimmar och debiteras per timme.</li>" +
         "<li><strong>Uppsättningsarbete utöver standardsidan:</strong> " + setup + " kr/timme (t.ex. e-postuppsättning eller specialfunktioner under bygget), enligt godkänd uppskattning.</li>" +
         "<li><strong>Ändringar och löpande arbete efter lansering:</strong> " + change + " kr/timme, minsta debitering 30 minuter per ärende och därefter per påbörjad kvart (15 min).</li>" +
         "<li><strong>Akut arbete utanför kontorstid:</strong> 1 995 kr/timme, minimum 1 timme (på din begäran).</li>" +
@@ -1089,7 +1089,7 @@
       custAgreement = buildAgreement(pr);   // så "Läs villkor" funkar även utan att resan laddats
       box.innerHTML =
         '<ul class="spec-list">' +
-        '<li><span>Löpande drift (inkl. AI-innehållsändringar upp till 15/mån &amp; ca 200 000 tokens/mån)</span><span>' + fmtKr(pr.drift_month) + ' kr/mån</span></li>' +
+        '<li><span>Löpande drift (inkl. AI-ändringar upp till 15/mån, varav 5 granskade, alt. ca 200 000 tokens/mån)</span><span>' + fmtKr(pr.drift_month) + ' kr/mån</span></li>' +
         '<li><span>Ändringar &amp; arbete per timme</span><span>' + fmtKr(pr.rate_change) + ' kr/tim</span></li>' +
         '<li><span>Uppsättning per timme</span><span>' + fmtKr(pr.rate_setup) + ' kr/tim</span></li>' +
         '</ul><p class="onb-hint-sm muted" style="margin-top:.5rem">Priser exkl. moms. Din detaljerade offert/kravspec hittar du under Min resa.</p>';
@@ -1121,6 +1121,7 @@
           "</div>" +
           '<form id="aichat-form" class="aichat-input"><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><button class="btn btn-primary btn-inline" type="submit">Skicka</button></form>' +
           (active ? '<div class="aichat-actions"><button type="button" class="btn btn-ghost btn-sm" id="aichat-refresh">↻ Uppdatera</button><button type="button" class="btn btn-ghost btn-sm" id="aichat-new">+ Ny ändring</button></div>' : "") +
+          '<div class="aichat-usage" id="aichat-usage"></div>' +
         "</div>" +
         (others.length ? '<div class="card"><h2>Tidigare ändringar</h2><div class="req-list" id="aichat-prev"></div></div>' : "");
       document.getElementById("aichat-form").addEventListener("submit", function (e) { e.preventDefault(); sendAIChat(cp, active); });
@@ -1131,7 +1132,28 @@
         prev.innerHTML = others.map(function (r) { return '<button class="req-item" data-openreq="' + r.id + '"><div class="req-item-top"><span class="req-title">' + esc(r.title) + "</span>" + chip(r.status, false) + '</div><div class="req-meta">' + fmtDate(r.updated_at || r.created_at) + "</div></button>"; }).join("");
         Array.prototype.forEach.call(prev.querySelectorAll("[data-openreq]"), function (b) { b.addEventListener("click", function () { aiChatActiveId = b.getAttribute("data-openreq"); loadAIChat(cp); }); });
       }
+      loadAIUsage();
       if (active) loadAIChatThread(active, cp);
+    });
+  }
+
+  // Visar kundens förbrukning denna månad ("X av 15 AI-ändringar") — matchar RPC-taket.
+  function loadAIUsage() {
+    var box = document.getElementById("aichat-usage"); if (!box) return;
+    sb.rpc("ai_usage_this_month").then(function (res) {
+      if (!box.isConnected) return;
+      var d = (res && res.data) || {};
+      var used = Number(d.used || 0), cap = Number(d.cap || 15);
+      var left = Math.max(0, cap - used);
+      if (used >= cap) {
+        box.className = "aichat-usage over";
+        box.innerHTML = "&#9888;&#65039; Månadens " + cap + " AI-ändringar är förbrukade. Fler ändringar avropas som konsulttimmar &ndash; hör av dig via Support så stämmer vi av.";
+      } else {
+        box.className = "aichat-usage" + (left <= 3 ? " low" : "");
+        box.innerHTML = "&#128260; <strong>" + used + " av " + cap + "</strong> AI-ändringar använda denna månad" +
+          (left <= 3 ? " &middot; " + left + " kvar" : "") +
+          '. <span class="aichat-usage-hint">Varav upp till 5 granskas och publiceras av oss; alternativt ca 200 000 tokens/mån.</span>';
+      }
     });
   }
 
