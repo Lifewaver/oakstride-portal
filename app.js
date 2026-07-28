@@ -1837,24 +1837,25 @@
     pre = pre || {};
     function val(v) { return v ? esc(v) : ""; }
     function keyOpt(v, l) { return '<option value="' + v + '"' + (pre.keyFunction === v ? " selected" : "") + ">" + l + "</option>"; }
-    return '<form id="form-build" class="card" style="max-width:680px;display:grid;gap:.75rem">' +
-      (showCust ? '<label>Kund<select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select></label>' : "") +
-      '<label>Företagsnamn<input id="b-company" required value="' + val(pre.company) + '"></label>' +
-      '<label>Slug (t.ex. nordvik-bygg)<input id="b-slug" required pattern="[a-z0-9-]+" value="' + val(pre.slug) + '"></label>' +
-      '<label>Segment (färg/tema)<select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '"' + (pre.segment === s[0] ? " selected" : "") + ">" + esc(s[1]) + "</option>"; }).join("") + "</select></label>" +
-      '<label>Grundmall (layout)<select id="b-template"><option value="generisk">Generisk</option></select></label>' +
-      '<div id="b-extra" style="display:grid;gap:.75rem"></div>' +
-      '<label>Domän (utan https)<input id="b-domain" placeholder="foretag.se" value="' + val(pre.domain) + '"></label>' +
-      '<label>Nyckelfunktion<select id="b-key">' +
+    return '<form id="form-build">' +
+      (showCust ? '<label for="b-customer">Kund</label><select id="b-customer"><option value="">— välj kund (krävs för att kunna dela) —</option></select>' : "") +
+      '<label for="b-company">Företagsnamn</label><input type="text" id="b-company" required value="' + val(pre.company) + '">' +
+      '<label for="b-slug">Slug (t.ex. nordvik-bygg)</label><input type="text" id="b-slug" required pattern="[a-z0-9-]+" value="' + val(pre.slug) + '">' +
+      '<label for="b-segment">Segment (färg/tema)</label><select id="b-segment">' + SEGMENTS.map(function (s) { return '<option value="' + s[0] + '"' + (pre.segment === s[0] ? " selected" : "") + ">" + esc(s[1]) + "</option>"; }).join("") + "</select>" +
+      '<label for="b-template">Grundmall (layout)</label><select id="b-template"><option value="generisk">Generisk</option></select>' +
+      '<div id="b-extra"></div>' +
+      '<label for="b-domain">Domän (utan https)</label><input type="text" id="b-domain" placeholder="foretag.se" value="' + val(pre.domain) + '">' +
+      '<label for="b-key">Nyckelfunktion</label><select id="b-key">' +
         keyOpt("offert", "Offert") + keyOpt("bokning", "Bokning") + keyOpt("meny", "Meny/bordsbokning") + keyOpt("ehandel", "E-handel") + keyOpt("kontakt", "Kontakt") +
-        "</select></label>" +
-      '<label>Rubrik (hero)<input id="b-headline" value="' + val(pre.headline) + '"></label>' +
-      '<label>Ingress (hero)<textarea id="b-lead" rows="2">' + val(pre.lead) + "</textarea></label>" +
-      '<label>Tjänster (en per rad: <em>Titel | kort beskrivning</em>)<textarea id="b-services" rows="4">' + val(pre.services) + "</textarea></label>" +
-      '<label>Om oss<textarea id="b-about" rows="2">' + val(pre.about) + "</textarea></label>" +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">' +
-        '<label>Telefon<input id="b-phone" value="' + val(pre.phone) + '"></label><label>E-post<input id="b-email" type="email" value="' + val(pre.email) + '"></label></div>' +
-      '<label>Ort<input id="b-city" value="' + val(pre.city) + '"></label>' +
+        "</select>" +
+      '<label for="b-headline">Rubrik (hero)</label><input type="text" id="b-headline" value="' + val(pre.headline) + '">' +
+      '<label for="b-lead">Ingress (hero)</label><textarea id="b-lead" rows="2">' + val(pre.lead) + "</textarea>" +
+      '<label for="b-services">Tjänster (en per rad: <em>Titel | kort beskrivning</em>)</label><textarea id="b-services" rows="4">' + val(pre.services) + "</textarea>" +
+      '<label for="b-about">Om oss</label><textarea id="b-about" rows="2">' + val(pre.about) + "</textarea>" +
+      '<div class="addon-form-row">' +
+        '<div><label for="b-phone">Telefon</label><input type="text" id="b-phone" value="' + val(pre.phone) + '"></div>' +
+        '<div><label for="b-email">E-post</label><input type="email" id="b-email" value="' + val(pre.email) + '"></div></div>' +
+      '<label for="b-city">Ort</label><input type="text" id="b-city" value="' + val(pre.city) + '">' +
       '<button type="submit" class="btn btn-primary btn-inline">Bygg sajt</button>' +
       "</form>";
   }
@@ -1922,8 +1923,8 @@
       box.innerHTML = currentExtra.map(function (f) {
         var field = (f.type === "lines" || f.type === "textarea")
           ? '<textarea id="bx-' + esc(f.key) + '" rows="4"' + (f.hint ? ' placeholder="' + esc(f.hint) + '"' : "") + "></textarea>"
-          : '<input id="bx-' + esc(f.key) + '"' + (f.hint ? ' placeholder="' + esc(f.hint) + '"' : "") + ">";
-        return "<label>" + esc(f.label) + field + "</label>";
+          : '<input type="text" id="bx-' + esc(f.key) + '"' + (f.hint ? ' placeholder="' + esc(f.hint) + '"' : "") + ">";
+        return '<label for="bx-' + esc(f.key) + '">' + esc(f.label) + "</label>" + field;
       }).join("");
     }
     sb.from("site_templates").select("*").eq("active", true).order("sort", { ascending: true }).then(function (res) {
