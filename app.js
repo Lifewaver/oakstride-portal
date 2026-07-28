@@ -1020,12 +1020,9 @@
       after = function () { loadOnboarding(); loadDraft(cp.id); loadUploads(cp.id); };
     } else if (custTab === "uppdatera") {
       html = '<h1 class="dash-title">Uppdatera sajten</h1>' +
-        '<div class="card"><h2>Chatta med vår AI-agent</h2>' +
-        '<p class="muted">Berätta vad du vill ändra — byt en text, uppdatera ett pris eller lägg in en bild. Vår AI tar fram ett utkast, en människa på OakStride granskar och publicerar. Löpande innehållsändringar ingår i din månadsavgift (upp till 5 granskade publiceringar/mån).</p>' +
-        '<button id="btn-new" class="btn btn-primary btn-big">✏️ Skapa en ändring</button>' +
-        '<p class="onb-hint-sm muted" style="margin-top:.7rem">💬 Det chattbaserade AI-fönstret lanseras inom kort. Tills dess skickas din ändring som ett ärende — precis lika enkelt, och vi hör av oss med ett utkast.</p></div>' +
-        '<div id="draft-box"></div>';
-      after = function () { var b = document.getElementById("btn-new"); if (b) b.addEventListener("click", renderNewRequestForm); loadDraft(cp.id); };
+        '<p class="muted">Chatta med vår AI-agent — beskriv vad du vill ändra så tar den fram ett utkast som OakStride granskar och publicerar. Ingår i din månadsavgift.</p>' +
+        '<div id="aichat" class="aichat"><div class="spinner"></div></div>';
+      after = function () { loadAIChat(cp); };
     } else if (custTab === "sajt") {
       html = '<h1 class="dash-title">Min hemsida</h1>' + siteCard() + '<div id="draft-box"></div>';
       after = function () { var b = document.getElementById("btn-new"); if (b) b.addEventListener("click", renderNewRequestForm); loadDraft(cp.id); };
@@ -1093,6 +1090,92 @@
         '<li><span>Uppsättning per timme</span><span>' + fmtKr(pr.rate_setup) + ' kr/tim</span></li>' +
         '</ul><p class="onb-hint-sm muted" style="margin-top:.5rem">Priser exkl. moms. Fullständiga villkor och din offert hittar du via knappen ovan och under Min resa.</p>';
     });
+  }
+
+  // ---------- AI-chatt (Uppdatera sajten) ----------
+  var aiChatActiveId = null;
+
+  function loadAIChat(cp) {
+    var box = document.getElementById("aichat"); if (!box) return;
+    sb.from("requests").select("*").eq("user_id", cp.id).order("updated_at", { ascending: false }).then(function (res) {
+      if (!box.isConnected) return;
+      var reqs = res.error ? [] : (res.data || []);
+      var active = null;
+      if (aiChatActiveId && aiChatActiveId !== "__new__") active = reqs.filter(function (r) { return r.id === aiChatActiveId; })[0] || null;
+      if (!active && aiChatActiveId !== "__new__") active = reqs.filter(function (r) { return r.status !== "done"; })[0] || null;
+      aiChatActiveId = active ? active.id : aiChatActiveId;
+      var others = reqs.filter(function (r) { return !active || r.id !== active.id; });
+      box.innerHTML =
+        '<div class="card aichat-card">' +
+          '<div class="aichat-thread" id="aichat-thread">' +
+            (active ? '<div class="spinner"></div>' : '<div class="aichat-empty"><p>👋 Hej! Beskriv vad du vill ändra på din sajt — t.ex. <em>&quot;byt öppettiderna till 9–18&quot;</em> eller <em>&quot;lägg in den här texten på startsidan&quot;</em>. Jag tar fram ett utkast som OakStride granskar och publicerar.</p></div>') +
+          "</div>" +
+          '<form id="aichat-form" class="aichat-input"><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><button class="btn btn-primary btn-inline" type="submit">Skicka</button></form>' +
+          (active ? '<div class="aichat-actions"><button type="button" class="btn btn-ghost btn-sm" id="aichat-refresh">↻ Uppdatera</button><button type="button" class="btn btn-ghost btn-sm" id="aichat-new">+ Ny ändring</button></div>' : "") +
+        "</div>" +
+        (others.length ? '<div class="card"><h2>Tidigare ändringar</h2><div class="req-list" id="aichat-prev"></div></div>' : "");
+      document.getElementById("aichat-form").addEventListener("submit", function (e) { e.preventDefault(); sendAIChat(cp, active); });
+      var rf = document.getElementById("aichat-refresh"); if (rf) rf.addEventListener("click", function () { loadAIChat(cp); });
+      var nw = document.getElementById("aichat-new"); if (nw) nw.addEventListener("click", function () { aiChatActiveId = "__new__"; loadAIChat(cp); });
+      var prev = document.getElementById("aichat-prev");
+      if (prev) {
+        prev.innerHTML = others.map(function (r) { return '<button class="req-item" data-openreq="' + r.id + '"><div class="req-item-top"><span class="req-title">' + esc(r.title) + "</span>" + chip(r.status, false) + '</div><div class="req-meta">' + fmtDate(r.updated_at || r.created_at) + "</div></button>"; }).join("");
+        Array.prototype.forEach.call(prev.querySelectorAll("[data-openreq]"), function (b) { b.addEventListener("click", function () { aiChatActiveId = b.getAttribute("data-openreq"); loadAIChat(cp); }); });
+      }
+      if (active) loadAIChatThread(active, cp);
+    });
+  }
+
+  function loadAIChatThread(active, cp) {
+    var thread = document.getElementById("aichat-thread"); if (!thread) return;
+    sb.from("request_comments").select("*").eq("request_id", active.id).order("created_at").then(function (res) {
+      if (!thread.isConnected) return;
+      var cs = res.error ? [] : (res.data || []);
+      var html = "";
+      if (active.description) html += '<div class="aichat-row me"><div class="bubble bubble-user">' + esc(active.description).replace(/\n/g, "<br>") + "</div></div>";
+      cs.forEach(function (c) {
+        var mine = c.author_id === cuid();
+        var isAI = /claude|ai|agent/i.test(c.author_label || "");
+        var who = mine ? "" : (isAI ? '<span class="bubble-who">🤖 OakStride AI</span>' : '<span class="bubble-who">OakStride</span>');
+        html += '<div class="aichat-row ' + (mine ? "me" : "them") + '"><div class="bubble ' + (mine ? "bubble-user" : (isAI ? "bubble-ai" : "bubble-oak")) + '">' + who + esc(c.body).replace(/\n/g, "<br>") + "</div></div>";
+      });
+      var st = active.status, sm = "";
+      if (st === "draft_ready") sm = "✅ Ett utkast är klart!" + (active.preview_url ? ' <a href="' + esc(active.preview_url) + '" target="_blank" rel="noopener">Förhandsgranska →</a>' : "") + " OakStride granskar och publicerar.";
+      else if (st === "questions") sm = "💬 AI:n har en fråga — svara nedan så fortsätter den.";
+      else if (st === "new" || st === "in_progress") sm = "⏳ AI:n arbetar på din ändring… det kan ta några minuter. Tryck ↻ Uppdatera.";
+      else if (st === "approved") sm = "👍 Godkänd — publiceras av OakStride.";
+      thread.innerHTML = html + (sm ? '<div class="aichat-status">' + sm + "</div>" : "");
+      thread.scrollTop = thread.scrollHeight;
+    });
+  }
+
+  function sendAIChat(cp, active) {
+    if (typeof previewBlocked === "function" && previewBlocked()) return;
+    var ta = document.getElementById("aichat-msg"); if (!ta) return;
+    var msg = (ta.value || "").trim(); if (!msg) return;
+    var btn = document.querySelector("#aichat-form button"); if (btn) { btn.disabled = true; btn.textContent = "Skickar…"; }
+    function fail(m) { toast(m, true); if (btn) { btn.disabled = false; btn.textContent = "Skicka"; } }
+    if (active && aiChatActiveId !== "__new__") {
+      sb.from("request_comments").insert({ request_id: active.id, author_id: cuid(), body: msg }).then(function (r) {
+        if (r.error) return fail("Kunde inte skicka: " + r.error.message);
+        sb.rpc("request_ai_draft", { p_request_id: active.id, p_reason: "answers" }).then(function (rr) { afterAISend(cp, rr); });
+      });
+    } else {
+      var title = msg.length > 60 ? msg.slice(0, 57) + "…" : msg;
+      sb.from("requests").insert({ user_id: cp.id, title: title, description: msg, status: "new" }).select().single().then(function (r) {
+        if (r.error) return fail("Kunde inte skapa ändring: " + r.error.message);
+        aiChatActiveId = r.data.id;
+        sb.rpc("request_ai_draft", { p_request_id: r.data.id, p_reason: "draft" }).then(function (rr) { afterAISend(cp, rr); });
+      });
+    }
+  }
+
+  function afterAISend(cp, rr) {
+    if (rr && rr.data && rr.data.ok === false && rr.data.error === "monthly_cap") {
+      toast("Månadsgränsen för AI-ändringar är nådd — skapa ett ärende under Support så hjälper vi dig manuellt.", true);
+    }
+    var ta = document.getElementById("aichat-msg"); if (ta) ta.value = "";
+    loadAIChat(cp);
   }
 
   // Delat webbplatsutkast (från "Bygg sajt"/agenten) i kundvyn
