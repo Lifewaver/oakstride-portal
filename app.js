@@ -970,6 +970,8 @@
   // ---------- Kundvy ----------
 
   // Kundportalen är nu en navigerad flervy-portal (custTab styr sektion).
+  function custGoto(name) { custTab = name; renderCustomer(); }
+
   function renderCustomer() {
     var cp = cprofile();
     var site = (cp.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
@@ -1032,7 +1034,7 @@
         '<div id="draft-box"></div>';
       after = function () { loadAIChat(cp); loadDraft(cp.id); };
     } else if (custTab === "statistik") {
-      html = '<h1 class="dash-title">Statistik &amp; rapporter</h1>' +
+      html = '<h1 class="dash-title">Besökare</h1>' +
         '<p class="muted">Anonym, cookiefri besöksstatistik för din sajt — så du ser att den gör nytta.</p>' +
         '<div class="card dash-stats"><h2>Besökare (senaste 30 dagarna)</h2><div id="stats-box"><div class="spinner"></div></div></div>';
       after = function () { loadStats(site); };
@@ -1059,7 +1061,7 @@
       after = function () {
         var g = document.getElementById("btn-goto-upd"); if (g) g.addEventListener("click", function () { gotoTab("uppdatera"); });
         var b2 = document.getElementById("btn-new2"); if (b2) b2.addEventListener("click", renderNewRequestForm);
-        loadRequests(false); loadStats(site); loadOnboarding();
+        loadRequests(false); loadStats(site); loadOnboarding(true);
       };
     }
 
@@ -1295,7 +1297,7 @@
     openPopupDoc("OakStrides kundvillkor", esc(ag.title) + " (version " + esc(ag.version) + ")", '<div class="card"><div class="agreement-box">' + ag.html + "</div></div>");
   }
 
-  function loadOnboarding() {
+  function loadOnboarding(compact) {
     var box = document.getElementById("onboarding-box");
     if (!box) return;
     Promise.all([
@@ -1361,6 +1363,44 @@
       var current = 0;
       for (var k = 1; k <= ONBOARDING_STEPS.length; k++) { if (!isDone(k)) { current = k; break; } }
       var allDone = current === 0;
+
+      // Kompakt "nästa steg"-kort för Översikt (Min resa har hela accordion-vyn).
+      if (compact) {
+        var na;
+        if (allDone) {
+          na = { turn: "done", eyebrow: "KLART", title: "🎉 Din sajt är live!", hint: "Grattis — sidan är lanserad och i löpande drift. Vill du ändra något gör du det direkt via Uppdatera sajten.", cta: "Uppdatera sajten", tab: "uppdatera" };
+        } else if (current === 1) {
+          na = { turn: "you", title: "Fyll i din projektförfrågan", hint: "Berätta om din verksamhet och dina mål — det är starten på din nya sajt.", cta: "Till projektförfrågan", tab: "resa" };
+        } else if (current === 2) {
+          na = { turn: "oak", title: "Vi bokar ditt uppstartsmöte", hint: "Vi hör av oss för att boka ett uppstartsmöte. Håll utkik i mejlen.", cta: "Se din resa", tab: "resa" };
+        } else if (current === 3) {
+          na = spec
+            ? { turn: "you", title: "Godkänn kravspec, offert & villkor", hint: "Din offert är klar — granska den, lämna faktureringsuppgifter och godkänn, så bygger vi din sida.", cta: "Granska & godkänn", tab: "resa" }
+            : { turn: "oak", title: "Vi tar fram din offert", hint: "Efter uppstartsmötet sammanställer vi kravspec & offert. Du får ett mejl när den är klar att godkänna.", cta: "Se din resa", tab: "resa" };
+        } else if (current === 4) {
+          na = utkastReady()
+            ? { turn: "you", title: "Granska ditt sajtutkast", hint: "Ditt utkast är klart! Titta igenom det och önska ändringar via AI-chatten.", cta: "Öppna utkast", tab: "uppdatera" }
+            : { turn: "oak", title: "Vi bygger din sida", hint: "Vi bygger nu din sida utifrån kravspecen. Du får den att granska inom kort.", cta: "Se din resa", tab: "resa" };
+        } else {
+          na = { turn: "you", title: "Godkänn & lansera", hint: "Sista steget — godkänn den färdiga sidan så lanserar vi den på din domän.", cta: "Till godkännande", tab: "resa" };
+        }
+        var eyebrow = na.eyebrow || (na.turn === "you" ? "DITT NÄSTA STEG" : "PÅGÅR HOS OSS");
+        var stepTxt = allDone ? "" : " · Steg " + current + " av " + ONBOARDING_STEPS.length;
+        box.innerHTML =
+          '<div class="card onb-next onb-next-' + na.turn + '">' +
+            '<div class="onb-next-eyebrow">' + eyebrow + stepTxt + "</div>" +
+            "<h2>" + na.title + "</h2>" +
+            '<p class="muted onb-next-hint">' + na.hint + "</p>" +
+            '<div class="onb-next-actions">' +
+              '<button class="btn ' + (na.turn === "you" ? "btn-primary" : "btn-ghost") + ' btn-inline" data-onbtab="' + na.tab + '">' + na.cta + " &rarr;</button>" +
+              (na.turn === "done" ? "" : '<button class="linklike" data-onbtab="resa">Se hela resan</button>') +
+            "</div>" +
+          "</div>";
+        Array.prototype.forEach.call(box.querySelectorAll("[data-onbtab]"), function (b) {
+          b.addEventListener("click", function () { custGoto(b.getAttribute("data-onbtab")); });
+        });
+        return;
+      }
 
       function clarFormHtml() {
         var pages = (((spec.data || {}).sections || {}).sidor || []).map(function (i) { return i.text; });
