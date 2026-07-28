@@ -63,7 +63,7 @@ code{font-family:'IBM Plex Mono',monospace;font-size:.9em;background:var(--birch
 .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
 
 label{display:block;font-size:.85rem;font-weight:600;color:var(--pine);margin:.75rem 0 .3rem}
-input[type=text],input[type=email],input[type=url],textarea,select{
+input[type=text],input[type=email],input[type=url],input[type=password],input[type=tel],input[type=number],input[type=date],textarea,select{
   width:100%;font-family:'IBM Plex Sans',sans-serif;font-size:.95rem;
   border:1px solid var(--line);border-radius:10px;padding:.6rem .75rem;
   background:#fff;color:var(--ink);
