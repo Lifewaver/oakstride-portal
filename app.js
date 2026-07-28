@@ -1028,19 +1028,15 @@
       after = function () { var b = document.getElementById("btn-new"); if (b) b.addEventListener("click", renderNewRequestForm); loadDraft(cp.id); };
     } else if (custTab === "statistik") {
       html = '<h1 class="dash-title">Statistik &amp; rapporter</h1>' +
-        '<div class="card dash-stats"><h2>Besökare</h2><div id="stats-box"><div class="spinner"></div></div></div>';
+        '<p class="muted">Anonym, cookiefri besöksstatistik för din sajt — så du ser att den gör nytta.</p>' +
+        '<div class="card dash-stats"><h2>Besökare (senaste 30 dagarna)</h2><div id="stats-box"><div class="spinner"></div></div></div>';
       after = function () { loadStats(site); };
     } else if (custTab === "avtal") {
       html = '<h1 class="dash-title">Avtal &amp; priser</h1>' +
-        '<div class="card"><h2>Ditt avtal och villkor</h2>' +
-        '<p class="muted">Här kan du alltid läsa de villkor du godkänt samt dina priser.</p>' +
-        '<button id="btn-read-terms" class="btn btn-primary btn-inline">Läs ditt avtal &amp; villkor</button></div>' +
-        '<div class="card"><h2>Dina priser</h2><div id="cust-price-box"><div class="spinner"></div></div></div>';
-      after = function () {
-        var b = document.getElementById("btn-read-terms");
-        if (b) b.addEventListener("click", function () { renderTermsView(renderCustomer); });
-        renderCustPrices();
-      };
+        '<p class="muted">Här har du alltid tillgång till dina priser och de villkor du godkänt.</p>' +
+        '<div class="card"><h2>Dina priser</h2><div id="cust-price-box"><div class="spinner"></div></div></div>' +
+        '<div class="card"><h2>Ditt avtal &amp; villkor</h2><div id="cust-terms-box"><div class="spinner"></div></div></div>';
+      after = function () { renderCustPrices(); };
     } else if (custTab === "support") {
       html = '<h1 class="dash-title">Support</h1>' +
         '<p class="muted">Här pratar du med en människa — inte en bot. Skapa ett ärende eller hör av dig direkt.</p>' +
@@ -1088,7 +1084,12 @@
         '<li><span>Löpande drift (inkl. AI-innehållsändringar upp till 5/mån)</span><span>' + fmtKr(pr.drift_month) + ' kr/mån</span></li>' +
         '<li><span>Ändringar &amp; arbete per timme</span><span>' + fmtKr(pr.rate_change) + ' kr/tim</span></li>' +
         '<li><span>Uppsättning per timme</span><span>' + fmtKr(pr.rate_setup) + ' kr/tim</span></li>' +
-        '</ul><p class="onb-hint-sm muted" style="margin-top:.5rem">Priser exkl. moms. Fullständiga villkor och din offert hittar du via knappen ovan och under Min resa.</p>';
+        '</ul><p class="onb-hint-sm muted" style="margin-top:.5rem">Priser exkl. moms. Din detaljerade offert/kravspec hittar du under Min resa.</p>';
+      var tb = document.getElementById("cust-terms-box");
+      if (tb) tb.innerHTML =
+        '<p class="muted">Villkoren du godkänt. De uppdateras ibland — du får alltid godkänna en ny version innan den gäller.</p>' +
+        '<details class="onb-manual"><summary style="cursor:pointer;font-weight:600;padding:.4rem 0">Visa villkoren (version ' + esc(custAgreement.version) + ')</summary>' +
+        '<div class="agreement-box" style="margin-top:.6rem">' + custAgreement.html + '</div></details>';
     });
   }
 
