@@ -412,3 +412,77 @@ form .btn{margin-top:1rem}
 .onb-master>.onb-master-sum h2{margin:0;flex:1}
 .onb-master[open]>.onb-master-sum{margin-bottom:.3rem}
 .onb-master[open]>.onb-master-sum .onb-acc-chev{transform:rotate(180deg)}
+
+/* ============================================================
+   PREMIUM 2026 — enhetligt lyft (login, ytor, djup, rörelse)
+   Matchar oakstride.se: varm nordisk, editoriell, återhållsam.
+   ============================================================ */
+:root{
+  --radius-sm:10px; --radius-lg:22px;
+  --sun:#c8792e;                         /* varm "din tur"-accent */
+  --shadow-sm:0 1px 2px rgba(20,40,30,.05);
+  --shadow-md:0 14px 34px rgba(20,40,30,.08);
+  --shadow-lg:0 34px 80px rgba(20,40,30,.34);
+}
+
+/* --- Inloggning / auth: fullbredds studio-foto + varumärkesgradient --- */
+.center-view{
+  position:relative;
+  background:
+    linear-gradient(135deg, rgba(30,58,47,.88) 0%, rgba(30,58,47,.62) 44%, rgba(47,100,134,.44) 100%),
+    url('studio-hero.jpg') center/cover no-repeat;
+}
+.center-view::after{                     /* mjuk vinjett för djup */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(130% 90% at 50% -10%, transparent 52%, rgba(16,30,22,.30) 100%);
+}
+.center-view > .card{position:relative;z-index:1}
+.auth-card{
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg), 0 2px 6px rgba(20,40,30,.16);
+  border-color:rgba(255,255,255,.65);
+  animation:authIn .55s cubic-bezier(.2,.7,.2,1) both;
+}
+@keyframes authIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.auth-card h1{font-size:1.7rem;letter-spacing:-.01em}
+.center-view .spinner{border-top-color:#fff;border-color:rgba(255,255,255,.35);border-top-color:#fff}
+
+/* --- App-shell: topbar med blur, bredare innehåll --- */
+.topbar{background:rgba(245,247,246,.82);backdrop-filter:saturate(1.15) blur(12px);-webkit-backdrop-filter:saturate(1.15) blur(12px)}
+.container{max-width:1040px}
+
+/* --- Kort & ytor: mjuk färgad elevation + hover-lyft --- */
+.card{border-radius:16px;box-shadow:var(--shadow-sm),var(--shadow-md);transition:box-shadow .18s ease,transform .18s ease,border-color .18s ease}
+
+/* --- Knappar: rundning + mjukt lyft --- */
+.btn{border-radius:12px;transition:background .15s ease,border-color .15s ease,box-shadow .18s ease,transform .12s ease}
+.btn-primary{box-shadow:0 6px 18px rgba(30,58,47,.20)}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 10px 26px rgba(30,58,47,.26)}
+.btn-primary:active{transform:translateY(0)}
+
+/* --- Tydliga fokusringar (tillgänglighet) --- */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{
+  outline:2px solid var(--acorn);outline-offset:2px;border-radius:6px;
+}
+
+/* --- Ärenderader & tabbar: lite mjukare interaktion --- */
+.req-item:hover{transform:translateY(-1px)}
+.tab{transition:background .15s ease,color .15s ease}
+
+/* --- Onboarding-resa: tydligare aktuellt steg + status --- */
+.onb-acc-item{transition:box-shadow .18s ease,border-color .18s ease}
+.onb-acc-item.current{border-color:var(--moss);box-shadow:0 0 0 1px var(--moss),0 12px 28px rgba(30,58,47,.10)}
+.onb-acc-item.current .onb-acc-sum{background:linear-gradient(90deg,rgba(74,107,87,.10),transparent 62%)}
+.onb-dot{transition:background .2s ease,color .2s ease,border-color .2s ease}
+
+/* --- Respektera reducerad rörelse --- */
+@media (prefers-reduced-motion: reduce){
+  .auth-card{animation:none}
+  .btn-primary:hover,.req-item:hover{transform:none}
+}
+
+/* --- Mobil: foto-login stannar snygg --- */
+@media (max-width:600px){
+  .center-view{background-position:center}
+  .auth-card{border-radius:18px}
+}
