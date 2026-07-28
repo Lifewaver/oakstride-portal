@@ -43,11 +43,11 @@
   function buildAgreement(p) {
     var site = fmtKr(p.site_price), drift = fmtKr(p.drift_month), setup = fmtKr(p.rate_setup), change = fmtKr(p.rate_change);
     return {
-      version: "2026-07-28-r3-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
-      title: "OakStrides kundvillkor",
+      version: "2026-07-28-r4-" + p.site_price + "-" + p.drift_month + "-" + p.rate_setup + "-" + p.rate_change,
+      title: "OakStride — Kundavtal & villkor",
       html: [
         "<h3>1. Om villkoren och avtalet</h3>",
-        '<p>Dessa villkor gäller mellan OakStride AB, org.nr enligt undertecknat avtal, Stockholm ("OakStride", "vi") och dig som kund ("Kunden", "du") för design, byggnation och löpande omhändertagande av din webbplats eller webbutik. Villkoren utgör tillsammans med det kundavtal och de bilagor som tecknats mellan parterna hela överenskommelsen. Vid motstridighet gäller handlingarna i följande ordning: (1) det undertecknade kundavtalet, (2) Bilaga 1 Uppstartsprojekt, (3) Bilaga 2 Löpande drift &amp; support, (4) Bilaga 3 Prislista, och därefter dessa portalvillkor. Din primära kanal för ändringsönskemål, support, statusuppdateringar, förhandsvisningar och godkännanden är den här kundportalen; brådskande fel kan även anmälas via e-post eller telefon enligt punkt 8.</p>',
+        '<p>Dessa villkor utgör, tillsammans med den kravspecifikation och offert som du godkänner i kundportalen samt de uppgifter du registrerar där (kontakt- och faktureringsuppgifter), <strong>hela avtalet mellan OakStride AB, Stockholm (org.nr enligt registreringsbevis, anges i din offert) ("OakStride", "vi") och dig som kund ("Kunden", "du")</strong> avseende design, byggnation och löpande omhändertagande av din webbplats eller webbutik. Något separat undertecknat avtal krävs inte — <strong>avtalet ingås när du godkänner dessa villkor och din offert i portalen</strong>, och godkännandet loggas med tidpunkt och en kontrollsumma (SHA-256) enligt sista stycket och är bindande. Vid motstridighet gäller den kravspecifikation och offert du godkänt (omfattning och pris) före dessa allmänna villkor. Din primära kanal för ändringsönskemål, support, statusuppdateringar, förhandsvisningar och godkännanden är den här kundportalen; brådskande fel kan även anmälas via e-post eller telefon enligt punkt 8.</p>',
 
         "<h3>2. Vad vi levererar — Standardwebbplats</h3>",
         "<p>En Standardwebbplats levereras till fast pris enligt punkt 10 och omfattar:</p>",
