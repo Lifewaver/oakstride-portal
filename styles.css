@@ -486,3 +486,30 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
   .center-view{background-position:center}
   .auth-card{border-radius:18px}
 }
+
+/* --- App-vy: mörkt tallgrönt sidhuvud + varm bakgrund (tydligt premium) --- */
+#view-app{
+  background:
+    linear-gradient(rgba(245,247,246,.94), rgba(245,247,246,.985)),
+    url('studio-desk.jpg') center top/cover no-repeat;
+  min-height:100vh;
+}
+@media (min-width:601px){
+  .topbar{
+    background:var(--pine);border-bottom:1px solid rgba(255,255,255,.10);
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+    box-shadow:0 8px 24px rgba(20,40,30,.14);
+  }
+  .topbar .brand-mark{color:#fff}
+  .topbar .brand-sub{color:#cfe0d6;border-color:rgba(255,255,255,.30)}
+  .topbar .tabs{background:rgba(255,255,255,.12)}
+  .topbar .tab{color:rgba(255,255,255,.85)}
+  .topbar .tab:hover{color:#fff;background:rgba(255,255,255,.10)}
+  .topbar .tab.active{background:#fff;color:var(--pine)}
+  .topbar .user-email{color:rgba(255,255,255,.72)}
+  .topbar .btn-ghost{color:#d7e6dc}
+  .topbar .btn-ghost:hover{color:#fff}
+}
+/* Innehållskort blir tydligt vita/upphöjda mot den varma bakgrunden */
+.container .card{background:#fff}
+.page-head h1{letter-spacing:-.01em}
