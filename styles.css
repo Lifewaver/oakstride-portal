@@ -549,11 +549,21 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .aichat-status{align-self:center;text-align:center;font-size:.86rem;color:var(--moss);background:#eef4f0;border:1px solid #d5e4da;border-radius:10px;padding:.5rem .8rem;margin-top:.2rem}
 .aichat-status a{font-weight:600}
 .aichat-input{display:flex;gap:.6rem;align-items:flex-end;padding:.8rem 1rem;border-top:1px solid var(--line);background:#fff;margin:0}
-.aichat-input textarea{flex:1;min-height:44px;margin:0}
+.aichat-input textarea{flex:1;min-height:52px;margin:0}
 .aichat-input .btn{margin:0;flex:none}
 .aichat-actions{display:flex;gap:.5rem;padding:.2rem 1rem .8rem;background:#fff}
 /* Uppdatera sajten: förhandsvisning bredvid chatten */
 .upd-grid{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,1.5fr);gap:1rem;align-items:start;margin-bottom:1rem}
 .upd-grid>.card,.upd-grid>.aichat>.card{margin:0}
 .upd-grid .dash-site{position:sticky;top:5rem}
-@media (max-width:860px){.upd-grid{grid-template-columns:1fr}.upd-grid .dash-site{position:static}}
+@media (max-width:860px){
+  .upd-grid{grid-template-columns:1fr}
+  .upd-grid .dash-site{position:static}
+  .upd-grid>.aichat{order:-1}                 /* chatten först på mobil, sajten under */
+  .upd-grid .dash-site .site-thumb{aspect-ratio:16/9}
+  .aichat-thread{max-height:none;min-height:42vh;padding:1rem}  /* naturlig sid-scroll, större yta */
+  .aichat-input{flex-direction:column;align-items:stretch;gap:.55rem;padding:.85rem}
+  .aichat-input textarea{min-height:88px;font-size:16px;width:100%}  /* 16px = ingen iOS-zoom */
+  .aichat-input .btn{width:100%}
+  .aichat-actions{padding:.4rem .85rem .85rem}
+}
