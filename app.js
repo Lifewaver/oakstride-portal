@@ -545,6 +545,7 @@
   var session = null;
   var profile = null;
   var adminTab = "arenden";
+  var custTab = "oversikt";
   var viewAsCustomer = false;
   var onbCollapsed = false; // kundsidan: minns om "Din resa mot en ny sida" är hopfälld
   // Admin kan förhandsvisa en specifik kunds portal (skrivskyddat). När previewUid är satt
@@ -968,12 +969,19 @@
 
   // ---------- Kundvy ----------
 
+  // Kundportalen är nu en navigerad flervy-portal (custTab styr sektion).
   function renderCustomer() {
     var cp = cprofile();
     var site = (cp.website || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     var siteUrl = site ? "https://" + site : null;
     var firstName = (cp.full_name || "").split(" ")[0];
-    main.innerHTML =
+
+    // Kund-navigering på plats + aktiv flik
+    var cnav = document.getElementById("cust-nav"), anav = document.getElementById("admin-nav");
+    if (cnav) { cnav.hidden = false; Array.prototype.forEach.call(cnav.querySelectorAll(".tab"), function (x) { x.classList.toggle("active", x.getAttribute("data-ctab") === custTab); }); }
+    if (anav) anav.hidden = true;
+
+    var banner =
       (actingUid
         ? '<div style="background:#8a4b1e;color:#fff;padding:.6rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-size:.92rem">' +
           '<span>🧑‍💻 Du agerar som kund <strong>(full åtkomst)</strong>:</span>' +
@@ -986,30 +994,78 @@
         ? '<div style="background:#1e3a2f;color:#fff;padding:.6rem 1rem;border-radius:10px;margin-bottom:1rem;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;font-size:.92rem">' +
           '<span>👁 Förhandsvisar <strong>' + esc(cp.full_name || cp.email) + '</strong>s portal — skrivskyddat</span>' +
           '<button id="btn-preview-exit" class="btn btn-ghost btn-sm" style="margin-left:auto;background:#fff">' + (previewWindow ? "Stäng" : "Avsluta förhandsvisning") + "</button></div>"
-        : "") +
-      '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
-      '<div id="onboarding-box"></div>' +
-      '<div id="draft-box"></div>' +
-      '<div id="uploads-box"></div>' +
-      '<div class="dash-grid">' +
-        '<div class="card dash-site"><h2>Din hemsida</h2>' +
+        : "");
+
+    function siteCard() {
+      return '<div class="card dash-site"><h2>Din hemsida</h2>' +
         (siteUrl
           ? '<div class="site-thumb"><iframe src="' + esc(siteUrl) + '" scrolling="no" tabindex="-1" loading="lazy" title="Förhandsvisning av din hemsida"></iframe></div>' +
             '<div class="site-row"><span class="site-domain">' + esc(site) + '</span>' +
             '<a class="linklike" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Besök sajten &rarr;</a></div>'
           : '<p class="muted">Din hemsida kopplas till kontot av OakStride — hör av dig om den inte syns här inom kort.</p>') +
-        '<button id="btn-new" class="btn btn-primary btn-big">✏️ Uppdatera min hemsida</button>' +
-        "</div>" +
-        '<div class="card dash-stats"><h2>Besökare</h2><div id="stats-box"><div class="spinner"></div></div></div>' +
-      "</div>" +
-      '<div class="card dash-reqs"><div class="page-head"><h2>Dina ärenden</h2>' +
-      '<button id="btn-new2" class="btn btn-google btn-inline btn-sm">+ Nytt ärende</button></div>' +
-      '<div id="req-list" class="req-list"><div class="spinner"></div></div></div>' +
-      '<div class="card dash-contact"><h2>Behöver du hjälp?</h2>' +
-      '<p class="muted">Vi finns ett mejl eller ett samtal bort — inga växlar, inga köer.</p>' +
-      '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
-    document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
-    document.getElementById("btn-new2").addEventListener("click", renderNewRequestForm);
+        '<button id="btn-new" class="btn btn-primary btn-big">✏️ Uppdatera min hemsida</button></div>';
+    }
+    function reqsCard(title) {
+      return '<div class="card dash-reqs"><div class="page-head"><h2>' + esc(title || "Dina ärenden") + '</h2>' +
+        '<button id="btn-new2" class="btn btn-google btn-inline btn-sm">+ Nytt ärende</button></div>' +
+        '<div id="req-list" class="req-list"><div class="spinner"></div></div></div>';
+    }
+
+    var html, after = null;
+
+    if (custTab === "resa") {
+      html = '<h1 class="dash-title">Din resa mot en ny sajt</h1>' +
+        '<p class="muted">Så här långt har vi kommit — öppna varje steg för att se vad som gäller.</p>' +
+        '<div id="onboarding-box"><div class="spinner"></div></div><div id="draft-box"></div><div id="uploads-box"></div>';
+      after = function () { loadOnboarding(); loadDraft(cp.id); loadUploads(cp.id); };
+    } else if (custTab === "uppdatera") {
+      html = '<h1 class="dash-title">Uppdatera sajten</h1>' +
+        '<div class="card"><h2>Chatta med vår AI-agent</h2>' +
+        '<p class="muted">Berätta vad du vill ändra — byt en text, uppdatera ett pris eller lägg in en bild. Vår AI tar fram ett utkast, en människa på OakStride granskar och publicerar. Löpande innehållsändringar ingår i din månadsavgift (upp till 5 granskade publiceringar/mån).</p>' +
+        '<button id="btn-new" class="btn btn-primary btn-big">✏️ Skapa en ändring</button>' +
+        '<p class="onb-hint-sm muted" style="margin-top:.7rem">💬 Det chattbaserade AI-fönstret lanseras inom kort. Tills dess skickas din ändring som ett ärende — precis lika enkelt, och vi hör av oss med ett utkast.</p></div>' +
+        '<div id="draft-box"></div>';
+      after = function () { var b = document.getElementById("btn-new"); if (b) b.addEventListener("click", renderNewRequestForm); loadDraft(cp.id); };
+    } else if (custTab === "sajt") {
+      html = '<h1 class="dash-title">Min hemsida</h1>' + siteCard() + '<div id="draft-box"></div>';
+      after = function () { var b = document.getElementById("btn-new"); if (b) b.addEventListener("click", renderNewRequestForm); loadDraft(cp.id); };
+    } else if (custTab === "statistik") {
+      html = '<h1 class="dash-title">Statistik &amp; rapporter</h1>' +
+        '<div class="card dash-stats"><h2>Besökare</h2><div id="stats-box"><div class="spinner"></div></div></div>';
+      after = function () { loadStats(site); };
+    } else if (custTab === "avtal") {
+      html = '<h1 class="dash-title">Avtal &amp; priser</h1>' +
+        '<div class="card"><h2>Ditt avtal och villkor</h2>' +
+        '<p class="muted">Här kan du alltid läsa de villkor du godkänt samt dina priser.</p>' +
+        '<button id="btn-read-terms" class="btn btn-primary btn-inline">Läs ditt avtal &amp; villkor</button></div>' +
+        '<div class="card"><h2>Dina priser</h2><div id="cust-price-box"><div class="spinner"></div></div></div>';
+      after = function () {
+        var b = document.getElementById("btn-read-terms");
+        if (b) b.addEventListener("click", function () { renderTermsView(renderCustomer); });
+        renderCustPrices();
+      };
+    } else if (custTab === "support") {
+      html = '<h1 class="dash-title">Support</h1>' +
+        '<p class="muted">Här pratar du med en människa — inte en bot. Skapa ett ärende eller hör av dig direkt.</p>' +
+        reqsCard("Dina ärenden") +
+        '<div class="card dash-contact"><h2>Behöver du prata med oss?</h2>' +
+        '<p class="muted">Vi finns ett mejl eller ett samtal bort — inga växlar, inga köer.</p>' +
+        '<p><a href="mailto:info@oakstride.se">info@oakstride.se</a> &middot; <a href="tel:+46702371704">070-237 17 04</a></p></div>';
+      after = function () { var b = document.getElementById("btn-new2"); if (b) b.addEventListener("click", renderNewRequestForm); loadRequests(false); };
+    } else { // oversikt
+      html = '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
+        '<div id="onboarding-box"></div><div id="draft-box"></div><div id="uploads-box"></div>' +
+        '<div class="dash-grid">' + siteCard() +
+        '<div class="card dash-stats"><h2>Besökare</h2><div id="stats-box"><div class="spinner"></div></div></div></div>' +
+        reqsCard("Dina ärenden");
+      after = function () {
+        document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
+        var b2 = document.getElementById("btn-new2"); if (b2) b2.addEventListener("click", renderNewRequestForm);
+        loadRequests(false); loadStats(site); loadOnboarding(); loadDraft(cp.id); loadUploads(cp.id);
+      };
+    }
+
+    main.innerHTML = banner + html;
     if (actingUid) {
       var apk = document.getElementById("acting-picker");
       if (apk) apk.addEventListener("change", function () { switchActing(this.value); });
@@ -1020,11 +1076,23 @@
       var pe = document.getElementById("btn-preview-exit");
       if (pe) pe.addEventListener("click", function () { if (previewWindow) window.close(); else exitPreview(); });
     }
-    loadRequests(false);
-    loadStats(site);
-    loadOnboarding();
-    loadDraft(cp.id);
-    loadUploads(cp.id);
+    if (after) after();
+  }
+
+  // Enkel prisöversikt i "Avtal & priser" (fylls ut i egen fas).
+  function renderCustPrices() {
+    var box = document.getElementById("cust-price-box"); if (!box) return;
+    sb.from("requirement_specs").select("data, version").eq("user_id", cuid()).order("version", { ascending: false }).limit(1).then(function (res) {
+      var spec = res.data && res.data[0] ? res.data[0].data : null;
+      var pr = effectivePricing(spec);
+      custAgreement = buildAgreement(pr);   // så "Läs villkor" funkar även utan att resan laddats
+      box.innerHTML =
+        '<ul class="spec-list">' +
+        '<li><span>Löpande drift (inkl. AI-innehållsändringar upp till 5/mån)</span><span>' + fmtKr(pr.drift_month) + ' kr/mån</span></li>' +
+        '<li><span>Ändringar &amp; arbete per timme</span><span>' + fmtKr(pr.rate_change) + ' kr/tim</span></li>' +
+        '<li><span>Uppsättning per timme</span><span>' + fmtKr(pr.rate_setup) + ' kr/tim</span></li>' +
+        '</ul><p class="onb-hint-sm muted" style="margin-top:.5rem">Priser exkl. moms. Fullständiga villkor och din offert hittar du via knappen ovan och under Min resa.</p>';
+    });
   }
 
   // Delat webbplatsutkast (från "Bygg sajt"/agenten) i kundvyn
@@ -1765,7 +1833,18 @@
     });
   });
 
+  document.querySelectorAll("#cust-nav .tab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      custTab = t.getAttribute("data-ctab");
+      var tb = document.querySelector(".topbar"); if (tb) tb.classList.remove("nav-open");
+      renderCustomer();
+    });
+  });
+
   function renderAdmin() {
+    var cnav = document.getElementById("cust-nav"), anav = document.getElementById("admin-nav");
+    if (cnav) cnav.hidden = true;
+    if (anav) anav.hidden = false;
     if (adminTab === "kunder") return renderAdminCustomers("kunder");
     if (adminTab === "nya") return renderAdminCustomers("nya");
     if (adminTab === "priser") return renderAdminPriser();

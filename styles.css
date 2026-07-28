@@ -513,3 +513,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 /* Innehållskort blir tydligt vita/upphöjda mot den varma bakgrunden */
 .container .card{background:#fff}
 .page-head h1{letter-spacing:-.01em}
+
+/* --- Kund-navigering: egen full-bredds rad under varumärket (desktop) --- */
+@media (min-width:601px){
+  .topbar{flex-wrap:wrap;row-gap:.5rem}
+  #cust-nav.cust-tabs{order:5;flex-basis:100%;flex-wrap:wrap;justify-content:flex-start;background:rgba(255,255,255,.10)}
+  #cust-nav.cust-tabs .tab{white-space:nowrap}
+}
