@@ -996,20 +996,27 @@
           '<button id="btn-preview-exit" class="btn btn-ghost btn-sm" style="margin-left:auto;background:#fff">' + (previewWindow ? "Stäng" : "Avsluta förhandsvisning") + "</button></div>"
         : "");
 
-    function siteCard() {
+    function sitePreviewCard() {
       return '<div class="card dash-site"><h2>Din hemsida</h2>' +
         (siteUrl
           ? '<div class="site-thumb"><iframe src="' + esc(siteUrl) + '" scrolling="no" tabindex="-1" loading="lazy" title="Förhandsvisning av din hemsida"></iframe></div>' +
             '<div class="site-row"><span class="site-domain">' + esc(site) + '</span>' +
             '<a class="linklike" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Besök sajten &rarr;</a></div>'
           : '<p class="muted">Din hemsida kopplas till kontot av OakStride — hör av dig om den inte syns här inom kort.</p>') +
-        '<button id="btn-new" class="btn btn-primary btn-big">✏️ Uppdatera min hemsida</button></div>';
+        '</div>';
+    }
+    function siteRowCompact() {
+      return '<div class="card dash-site"><div class="page-head"><h2>Din hemsida</h2>' +
+        (siteUrl ? '<a class="linklike" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Besök &rarr;</a>' : "") + "</div>" +
+        (siteUrl ? '<p class="site-domain">' + esc(site) + "</p>" : '<p class="muted">Kopplas till ditt konto av OakStride.</p>') +
+        '<button id="btn-goto-upd" class="btn btn-primary btn-inline">✏️ Uppdatera sajten</button></div>';
     }
     function reqsCard(title) {
       return '<div class="card dash-reqs"><div class="page-head"><h2>' + esc(title || "Dina ärenden") + '</h2>' +
         '<button id="btn-new2" class="btn btn-google btn-inline btn-sm">+ Nytt ärende</button></div>' +
         '<div id="req-list" class="req-list"><div class="spinner"></div></div></div>';
     }
+    function gotoTab(name) { custTab = name; renderCustomer(); }
 
     var html, after = null;
 
@@ -1020,12 +1027,10 @@
       after = function () { loadOnboarding(); loadDraft(cp.id); loadUploads(cp.id); };
     } else if (custTab === "uppdatera") {
       html = '<h1 class="dash-title">Uppdatera sajten</h1>' +
-        '<p class="muted">Chatta med vår AI-agent — beskriv vad du vill ändra så tar den fram ett utkast som OakStride granskar och publicerar. Ingår i din månadsavgift.</p>' +
-        '<div id="aichat" class="aichat"><div class="spinner"></div></div>';
-      after = function () { loadAIChat(cp); };
-    } else if (custTab === "sajt") {
-      html = '<h1 class="dash-title">Min hemsida</h1>' + siteCard() + '<div id="draft-box"></div>';
-      after = function () { var b = document.getElementById("btn-new"); if (b) b.addEventListener("click", renderNewRequestForm); loadDraft(cp.id); };
+        '<p class="muted">Se din sajt och chatta med AI-agenten — beskriv vad du vill ändra så tar den fram ett utkast som OakStride granskar och publicerar. Ingår i din månadsavgift.</p>' +
+        '<div class="upd-grid">' + sitePreviewCard() + '<div id="aichat" class="aichat"><div class="spinner"></div></div></div>' +
+        '<div id="draft-box"></div>';
+      after = function () { loadAIChat(cp); loadDraft(cp.id); };
     } else if (custTab === "statistik") {
       html = '<h1 class="dash-title">Statistik &amp; rapporter</h1>' +
         '<p class="muted">Anonym, cookiefri besöksstatistik för din sajt — så du ser att den gör nytta.</p>' +
@@ -1047,14 +1052,14 @@
       after = function () { var b = document.getElementById("btn-new2"); if (b) b.addEventListener("click", renderNewRequestForm); loadRequests(false); };
     } else { // oversikt
       html = '<h1 class="dash-title">' + (firstName ? "Hej " + esc(firstName) + "!" : "Välkommen!") + "</h1>" +
-        '<div id="onboarding-box"></div><div id="draft-box"></div><div id="uploads-box"></div>' +
-        '<div class="dash-grid">' + siteCard() +
+        '<div id="onboarding-box"></div>' +
+        '<div class="dash-grid">' + siteRowCompact() +
         '<div class="card dash-stats"><h2>Besökare</h2><div id="stats-box"><div class="spinner"></div></div></div></div>' +
         reqsCard("Dina ärenden");
       after = function () {
-        document.getElementById("btn-new").addEventListener("click", renderNewRequestForm);
+        var g = document.getElementById("btn-goto-upd"); if (g) g.addEventListener("click", function () { gotoTab("uppdatera"); });
         var b2 = document.getElementById("btn-new2"); if (b2) b2.addEventListener("click", renderNewRequestForm);
-        loadRequests(false); loadStats(site); loadOnboarding(); loadDraft(cp.id); loadUploads(cp.id);
+        loadRequests(false); loadStats(site); loadOnboarding();
       };
     }
 
