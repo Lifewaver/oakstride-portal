@@ -1007,6 +1007,17 @@
           : '<p class="muted">Din hemsida kopplas till kontot av OakStride — hör av dig om den inte syns här inom kort.</p>') +
         '</div>';
     }
+    // Arbetsyta-förhandsvisning (förslag B): webbläsar-ram + sajt + lanseringsbanner-overlay.
+    function wsPreview() {
+      return '<div class="card ws-preview">' +
+        '<div class="ws-chrome"><span class="ws-dom">🌐 ' + esc(site || "din sajt") + '</span>' +
+          (siteUrl ? '<a class="ws-refresh" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Öppna sajten &rarr;</a>' : "") + "</div>" +
+        (siteUrl
+          ? '<div class="ws-frame"><iframe src="' + esc(siteUrl) + '" scrolling="no" tabindex="-1" loading="lazy" title="Förhandsvisning av din hemsida"></iframe>' +
+            '<div id="preview-draftbanner" class="preview-draftbanner" hidden></div></div>'
+          : '<div class="ws-empty"><p class="muted">Din hemsida kopplas till kontot av OakStride — hör av dig om den inte syns här inom kort.</p></div>') +
+        "</div>";
+    }
     function siteRowCompact() {
       return '<div class="card dash-site"><div class="page-head"><h2>Din hemsida</h2>' +
         (siteUrl ? '<a class="linklike" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Besök &rarr;</a>' : "") + "</div>" +
@@ -1030,7 +1041,7 @@
     } else if (custTab === "uppdatera") {
       html = '<h1 class="dash-title">Uppdatera sajten</h1>' +
         '<p class="muted">Din sajt till vänster, ändringar till höger. Beskriv vad du vill — AI:n tar fram ett utkast, sen väljer du att <strong>lansera direkt</strong> eller <strong>be OakStride granska</strong> först. Ingår i din månadsavgift.</p>' +
-        '<div class="upd-grid">' + sitePreviewCard() + '<div id="aichat" class="aichat"><div class="spinner"></div></div></div>' +
+        '<div class="upd-grid">' + wsPreview() + '<div id="aichat" class="aichat"><div class="spinner"></div></div></div>' +
         '<details class="upd-images"><summary class="upd-images-sum">📷 Mina bilder <span class="muted">— ladda upp &amp; återanvänd</span></summary><div id="uploads-box"></div></details>' +
         '<div id="draft-box"></div>';
       after = function () { loadAIChat(cp); loadUploads(cp.id, true); loadDraft(cp.id); };
@@ -1116,15 +1127,21 @@
       var others = reqs.filter(function (r) { return !active || r.id !== active.id; });
       box.innerHTML =
         '<div class="card aichat-card">' +
+          '<div class="aichat-head">Ändringar</div>' +
           '<div class="aichat-thread" id="aichat-thread">' +
             (active ? '<div class="spinner"></div>' : '<div class="aichat-empty"><p>👋 Hej! Beskriv vad du vill ändra på din sajt — t.ex. <em>&quot;byt öppettiderna till 9–18&quot;</em> eller <em>&quot;lägg in den här texten på startsidan&quot;</em>. Jag tar fram ett utkast som OakStride granskar och publicerar.</p></div>') +
           "</div>" +
-          '<form id="aichat-form" class="aichat-input"><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><button class="btn btn-primary btn-inline" type="submit">Skicka</button></form>' +
+          '<form id="aichat-form" class="aichat-input"><button type="button" class="aichat-attach" id="aichat-attach" title="Ladda upp bild">📎</button><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><button class="btn btn-primary btn-inline" type="submit">Skicka</button></form>' +
           (active ? '<div class="aichat-actions"><button type="button" class="btn btn-ghost btn-sm" id="aichat-refresh">↻ Uppdatera</button><button type="button" class="btn btn-ghost btn-sm" id="aichat-new">+ Ny ändring</button></div>' : "") +
           '<div class="aichat-usage" id="aichat-usage"></div>' +
         "</div>" +
         (others.length ? '<div class="card"><h2>Tidigare ändringar</h2><div class="req-list" id="aichat-prev"></div></div>' : "");
       document.getElementById("aichat-form").addEventListener("submit", function (e) { e.preventDefault(); sendAIChat(cp, active); });
+      var att = document.getElementById("aichat-attach");
+      if (att) att.addEventListener("click", function () {
+        var d = document.querySelector(".upd-images"); if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+        var fi = document.getElementById("up-input"); if (fi) fi.click();
+      });
       var rf = document.getElementById("aichat-refresh"); if (rf) rf.addEventListener("click", function () { loadAIChat(cp); });
       var nw = document.getElementById("aichat-new"); if (nw) nw.addEventListener("click", function () { aiChatActiveId = "__new__"; loadAIChat(cp); });
       var prev = document.getElementById("aichat-prev");
@@ -1171,24 +1188,36 @@
         html += '<div class="aichat-row ' + (mine ? "me" : "them") + '"><div class="bubble ' + (mine ? "bubble-user" : (isAI ? "bubble-ai" : "bubble-oak")) + '">' + who + esc(c.body).replace(/\n/g, "<br>") + "</div></div>";
       });
       var st = active.status, sm = "";
-      if (st === "draft_ready") {
-        sm = "✅ Utkastet är klart! " +
-          (active.preview_url ? '<a href="' + esc(active.preview_url) + '" target="_blank" rel="noopener">Förhandsgranska &rarr;</a>' : "") +
-          '<div class="draft-actions">' +
-            '<button type="button" class="btn btn-primary btn-sm" data-publish="' + active.id + '">🚀 Lansera direkt</button>' +
-            '<button type="button" class="btn btn-ghost btn-sm" data-review="' + active.id + '">🔍 Be OakStride granska</button>' +
-          "</div>" +
-          '<div class="draft-hint">Lansera direkt = publiceras på din sajt på en gång. Granska = vi tittar innan det går live.</div>';
-      }
+      if (st === "draft_ready") sm = "✅ Utkastet är klart! " + (active.preview_url ? '<a href="' + esc(active.preview_url) + '" target="_blank" rel="noopener">Förhandsgranska &rarr;</a> &middot; ' : "") + "Välj <strong>Lansera direkt</strong> eller <strong>Granska</strong> vid förhandsvisningen.";
       else if (st === "questions") sm = "💬 AI:n har en fråga — svara nedan så fortsätter den.";
       else if (st === "new" || st === "in_progress") sm = "⏳ AI:n arbetar på din ändring… det kan ta några minuter. Tryck ↻ Uppdatera.";
       else if (st === "publishing") sm = "🚀 Publicerar din ändring… det tar en minut. Tryck ↻ Uppdatera.";
       else if (st === "published") sm = "🎉 Ändringen är live på din sajt!";
       else if (st === "approved") sm = "👍 Skickad till OakStride — vi granskar och publicerar.";
       thread.innerHTML = html + (sm ? '<div class="aichat-status">' + sm + "</div>" : "");
-      var pb = thread.querySelector("[data-publish]"); if (pb) pb.addEventListener("click", function () { publishChange(active, cp); });
-      var rb = thread.querySelector("[data-review]"); if (rb) rb.addEventListener("click", function () { requestReview(active, cp); });
       thread.scrollTop = thread.scrollHeight;
+
+      // Lanseringsbanner ovanpå förhandsvisningen (förslag B)
+      var pbn = document.getElementById("preview-draftbanner");
+      if (pbn) {
+        if (st === "draft_ready") {
+          pbn.hidden = false; pbn.className = "preview-draftbanner";
+          pbn.innerHTML = '<div class="db-top">✨ Utkastet är klart — hur vill du gå vidare?</div>' +
+            '<div class="draft-actions">' +
+              '<button type="button" class="btn btn-ghost btn-sm" data-review="' + active.id + '">🔍 Be OakStride granska</button>' +
+              '<button type="button" class="btn btn-primary btn-sm" data-publish="' + active.id + '">🚀 Lansera direkt</button>' +
+            "</div>" +
+            '<div class="draft-hint">Lansera direkt = publiceras på din sajt på en gång. Granska = vi tittar innan det går live.</div>';
+          var pbb = pbn.querySelector("[data-publish]"); if (pbb) pbb.addEventListener("click", function () { publishChange(active, cp); });
+          var rbb = pbn.querySelector("[data-review]"); if (rbb) rbb.addEventListener("click", function () { requestReview(active, cp); });
+        } else if (st === "publishing") {
+          pbn.hidden = false; pbn.className = "preview-draftbanner"; pbn.innerHTML = '<div class="db-top">🚀 Publicerar… det tar en minut.</div>';
+        } else if (st === "published") {
+          pbn.hidden = false; pbn.className = "preview-draftbanner is-live"; pbn.innerHTML = '<div class="db-top">🎉 Ändringen är live!</div>';
+        } else {
+          pbn.hidden = true; pbn.innerHTML = "";
+        }
+      }
     });
   }
 
