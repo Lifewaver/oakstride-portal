@@ -1148,8 +1148,10 @@
             '<button type="button" class="chip2" data-chip="Byt bilden ">🖼️ Byt en bild</button>' +
             '<button type="button" class="chip2" data-chip="Uppdatera öppettiderna till: ">🕐 Öppettider</button>' +
             '<button type="button" class="chip2" data-chip="Lägg till en nyhet: ">📰 Ny nyhet</button>' +
+            '<button type="button" class="chip2" data-chip="Uppdatera priserna: ">💰 Priser</button>' +
+            '<button type="button" class="chip2" data-chip="Ändra kontaktuppgifterna: ">📞 Kontaktuppgifter</button>' +
           "</div>" +
-          '<form id="aichat-form" class="aichat-input"><button type="button" class="aichat-attach" id="aichat-attach" title="Ladda upp bild">📎</button><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><button class="btn btn-primary btn-inline" type="submit">Skicka</button></form>' +
+          '<form id="aichat-form" class="aichat-input"><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><div class="aichat-inbar"><button type="button" class="aichat-attach" id="aichat-attach" title="Ladda upp bild">📎</button><button class="btn btn-primary btn-inline aichat-send" type="submit">Skicka</button></div></form>' +
           '<div class="aichat-usage" id="aichat-usage"></div>' +
         "</div>";
       document.getElementById("aichat-form").addEventListener("submit", function (e) { e.preventDefault(); sendAIChat(cp, active); });
