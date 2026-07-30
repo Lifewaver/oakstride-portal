@@ -1049,6 +1049,7 @@
         "</div>" +
         '<div id="aichat" class="aichat"><div class="spinner"></div></div>' +
         '<details class="upd-images"><summary class="upd-images-sum">📷 Mina bilder <span class="muted">— ladda upp &amp; återanvänd</span></summary><div id="uploads-box"></div></details>' +
+        '<div id="aichat-history"></div>' +
         '<div id="draft-box"></div>';
       after = function () { loadAIChat(cp); loadUploads(cp.id, true); loadDraft(cp.id); };
     } else if (custTab === "statistik") {
@@ -1120,6 +1121,11 @@
 
   // ---------- AI-chatt (Uppdatera sajten) ----------
   var aiChatActiveId = null;
+  var aiPollTimer = null;
+  function statusPill(st) {
+    var m = ({ published: ["LIVE", "live"], done: ["KLAR", "live"], approved: ["GRANSKAS", "rev"], draft_ready: ["UTKAST KLART", "rev"], publishing: ["PUBLICERAR", "rev"], questions: ["FRÅGA", "rev"], "new": ["PÅGÅR", "rev"], in_progress: ["PÅGÅR", "rev"] })[st] || ["PÅGÅR", "rev"];
+    return '<span class="hpill ' + m[1] + '">' + m[0] + "</span>";
+  }
 
   function loadAIChat(cp) {
     var box = document.getElementById("aichat"); if (!box) return;
@@ -1128,14 +1134,14 @@
       var reqs = res.error ? [] : (res.data || []);
       var active = null;
       if (aiChatActiveId && aiChatActiveId !== "__new__") active = reqs.filter(function (r) { return r.id === aiChatActiveId; })[0] || null;
-      if (!active && aiChatActiveId !== "__new__") active = reqs.filter(function (r) { return r.status !== "done"; })[0] || null;
+      if (!active && aiChatActiveId !== "__new__") active = reqs.filter(function (r) { return ["done", "published", "approved"].indexOf(r.status) < 0; })[0] || null;
       aiChatActiveId = active ? active.id : aiChatActiveId;
       var others = reqs.filter(function (r) { return !active || r.id !== active.id; });
       box.innerHTML =
         '<div class="card aichat-card">' +
           '<div class="aichat-head"><span class="aichat-ai">🤖</span><span class="aichat-ttl">Din AI-assistent</span><span class="aichat-live">Redo</span></div>' +
           '<div class="aichat-thread" id="aichat-thread">' +
-            (active ? '<div class="spinner"></div>' : '<div class="aichat-empty"><p>👋 Hej! Beskriv vad du vill ändra på din sajt — t.ex. <em>&quot;byt öppettiderna till 9–18&quot;</em> eller <em>&quot;lägg in den här texten på startsidan&quot;</em>. Jag tar fram ett utkast som OakStride granskar och publicerar.</p></div>') +
+            (active ? '<div class="spinner"></div>' : '<div class="aichat-empty"><p>👋 Hej! Vad vill du ändra på din sajt idag? Beskriv med egna ord — t.ex. <em>&quot;byt öppettiderna till 9–18&quot;</em> — så tar jag fram ett utkast du kan förhandsgranska och publicera.</p></div>') +
           "</div>" +
           '<div class="aichat-chips">' +
             '<button type="button" class="chip2" data-chip="Ändra texten på startsidan till: ">✏️ Ändra en text</button>' +
@@ -1144,10 +1150,8 @@
             '<button type="button" class="chip2" data-chip="Lägg till en nyhet: ">📰 Ny nyhet</button>' +
           "</div>" +
           '<form id="aichat-form" class="aichat-input"><button type="button" class="aichat-attach" id="aichat-attach" title="Ladda upp bild">📎</button><textarea id="aichat-msg" rows="2" placeholder="Skriv din ändring…" required></textarea><button class="btn btn-primary btn-inline" type="submit">Skicka</button></form>' +
-          (active ? '<div class="aichat-actions"><button type="button" class="btn btn-ghost btn-sm" id="aichat-refresh">↻ Uppdatera</button><button type="button" class="btn btn-ghost btn-sm" id="aichat-new">+ Ny ändring</button></div>' : "") +
           '<div class="aichat-usage" id="aichat-usage"></div>' +
-        "</div>" +
-        (others.length ? '<div class="card"><h2>Tidigare ändringar</h2><div class="req-list" id="aichat-prev"></div></div>' : "");
+        "</div>";
       document.getElementById("aichat-form").addEventListener("submit", function (e) { e.preventDefault(); sendAIChat(cp, active); });
       var att = document.getElementById("aichat-attach");
       if (att) att.addEventListener("click", function () {
@@ -1161,12 +1165,14 @@
           try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
         });
       });
-      var rf = document.getElementById("aichat-refresh"); if (rf) rf.addEventListener("click", function () { loadAIChat(cp); });
-      var nw = document.getElementById("aichat-new"); if (nw) nw.addEventListener("click", function () { aiChatActiveId = "__new__"; loadAIChat(cp); });
-      var prev = document.getElementById("aichat-prev");
-      if (prev) {
-        prev.innerHTML = others.map(function (r) { return '<button class="req-item" data-openreq="' + r.id + '"><div class="req-item-top"><span class="req-title">' + esc(r.title) + "</span>" + chip(r.status, false) + '</div><div class="req-meta">' + fmtDate(r.updated_at || r.created_at) + "</div></button>"; }).join("");
-        Array.prototype.forEach.call(prev.querySelectorAll("[data-openreq]"), function (b) { b.addEventListener("click", function () { aiChatActiveId = b.getAttribute("data-openreq"); loadAIChat(cp); }); });
+      var hist = document.getElementById("aichat-history");
+      if (hist) {
+        hist.innerHTML = others.length
+          ? ('<div class="card upd-history"><h2 class="upd-history-h">🕒 Tidigare ändringar</h2><div class="histlist">' +
+              others.map(function (r) { return '<button class="histrow" data-openreq="' + r.id + '"><span class="histrow-t">' + esc(r.title) + "</span>" + statusPill(r.status) + "</button>"; }).join("") +
+              "</div></div>")
+          : "";
+        Array.prototype.forEach.call(hist.querySelectorAll("[data-openreq]"), function (b) { b.addEventListener("click", function () { aiChatActiveId = b.getAttribute("data-openreq"); loadAIChat(cp); }); });
       }
       loadAIUsage();
       if (active) loadAIChatThread(active, cp);
@@ -1186,9 +1192,8 @@
         box.innerHTML = "&#9888;&#65039; Månadens " + cap + " AI-ändringar är förbrukade. Fler ändringar avropas som konsulttimmar &ndash; hör av dig via Support så stämmer vi av.";
       } else {
         box.className = "aichat-usage" + (left <= 3 ? " low" : "");
-        box.innerHTML = "&#128260; <strong>" + used + " av " + cap + "</strong> AI-ändringar använda denna månad" +
-          (left <= 3 ? " &middot; " + left + " kvar" : "") +
-          '. <span class="aichat-usage-hint">Varav upp till 5 granskas och publiceras av oss; alternativt ca 200 000 tokens/mån.</span>';
+        box.innerHTML = "&#128260; <strong>" + left + " av " + cap + "</strong> ändringar kvar denna månad" +
+          '<span class="usage-bar"><i style="width:' + Math.min(100, Math.round(100 * used / cap)) + '%"></i></span>';
       }
     });
   }
@@ -1229,6 +1234,11 @@
       thread.scrollTop = thread.scrollHeight;
       var pb = thread.querySelector("[data-publish]"); if (pb) pb.addEventListener("click", function () { publishChange(active, cp); });
       var rb = thread.querySelector("[data-review]"); if (rb) rb.addEventListener("click", function () { requestReview(active, cp); });
+      // Auto-uppdatera medan AI:n arbetar/publicerar (ersätter manuell ↻-knapp)
+      clearTimeout(aiPollTimer);
+      if (["new", "in_progress", "publishing"].indexOf(st) >= 0) {
+        aiPollTimer = setTimeout(function () { if (custTab === "uppdatera" && document.getElementById("aichat-thread")) loadAIChat(cp); }, 6000);
+      }
     });
   }
 
@@ -1238,7 +1248,9 @@
     var msg = (ta.value || "").trim(); if (!msg) return;
     var btn = document.querySelector("#aichat-form button"); if (btn) { btn.disabled = true; btn.textContent = "Skickar…"; }
     function fail(m) { toast(m, true); if (btn) { btn.disabled = false; btn.textContent = "Skicka"; } }
-    if (active && aiChatActiveId !== "__new__") {
+    // En avslutad ändring (publicerad/klar/godkänd) → nästa meddelande blir en NY ändring automatiskt.
+    var finished = active && ["published", "done", "approved"].indexOf(active.status) >= 0;
+    if (active && aiChatActiveId !== "__new__" && !finished) {
       sb.from("request_comments").insert({ request_id: active.id, author_id: cuid(), body: msg }).then(function (r) {
         if (r.error) return fail("Kunde inte skicka: " + r.error.message);
         sb.rpc("request_ai_draft", { p_request_id: active.id, p_reason: "answers" }).then(function (rr) { afterAISend(cp, rr); });
