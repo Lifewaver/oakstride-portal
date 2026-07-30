@@ -568,18 +568,34 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .upd-images[open] .upd-images-sum::after{transform:rotate(180deg)}
 .upd-images[open] .upd-images-sum{border-bottom:1px solid var(--line)}
 .upd-images #uploads-box .card{margin:0;border:0;box-shadow:none}
+/* Arbetsyta-förhandsvisning (förslag B) */
+.ws-preview{padding:0;overflow:hidden}
+.ws-chrome{display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;border-bottom:1px solid var(--line);background:var(--paper)}
+.ws-dom{font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:var(--pine);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-chrome .ws-refresh{margin-left:auto;color:var(--moss);font-weight:600;font-size:.8rem;text-decoration:none;white-space:nowrap}
+.ws-frame{position:relative;width:100%;aspect-ratio:16/11;overflow:hidden;background:#fff}
+.ws-frame iframe{width:400%;height:400%;transform:scale(.25);transform-origin:0 0;border:0;pointer-events:none}
+.ws-empty{padding:1.2rem}
+.preview-draftbanner{position:absolute;left:.7rem;right:.7rem;bottom:.7rem;background:#fff;border:1px solid #bfe0cd;border-left:4px solid #1e7a4b;border-radius:12px;padding:.7rem .85rem;box-shadow:0 6px 22px rgba(20,40,30,.18)}
+.preview-draftbanner[hidden]{display:none}
+.preview-draftbanner .db-top{font-weight:600;font-size:.9rem;color:var(--ink)}
+.preview-draftbanner.is-live{border-left-color:#1e7a4b;background:#f0f8f3}
+/* Ändringar-panelens rubrik + bifoga-knapp */
+.aichat-head{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:1.1rem;color:var(--pine);padding:.9rem 1.1rem;border-bottom:1px solid var(--line)}
+.aichat-attach{width:38px;height:38px;flex:none;border:1px solid var(--line);background:#fff;border-radius:11px;cursor:pointer;font-size:1rem;line-height:1}
+.aichat-attach:hover{border-color:var(--moss)}
 /* Uppdatera sajten: förhandsvisning bredvid chatten */
 .upd-grid{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,1.5fr);gap:1rem;align-items:start;margin-bottom:1rem}
 .upd-grid>.card,.upd-grid>.aichat>.card{margin:0}
 .upd-grid .dash-site{position:sticky;top:5rem}
 @media (max-width:860px){
   .upd-grid{grid-template-columns:1fr}
-  .upd-grid .dash-site{position:static}
   .upd-grid>.aichat{order:-1}                 /* chatten först på mobil, sajten under */
-  .upd-grid .dash-site .site-thumb{aspect-ratio:16/9}
+  .ws-frame{aspect-ratio:16/10}
   .aichat-thread{max-height:none;min-height:42vh;padding:1rem}  /* naturlig sid-scroll, större yta */
   .aichat-input{flex-direction:column;align-items:stretch;gap:.55rem;padding:.85rem}
-  .aichat-input textarea{min-height:88px;font-size:16px;width:100%}  /* 16px = ingen iOS-zoom */
-  .aichat-input .btn{width:100%}
+  .aichat-input textarea{order:1;min-height:88px;font-size:16px;width:100%}  /* 16px = ingen iOS-zoom */
+  .aichat-attach{order:2;align-self:flex-start}
+  .aichat-input .btn{order:3;width:100%}
   .aichat-actions{padding:.4rem .85rem .85rem}
 }
