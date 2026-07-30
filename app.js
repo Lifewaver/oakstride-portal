@@ -1048,7 +1048,7 @@
           (siteUrl ? '<a class="btn btn-ghost btn-inline siteband-btn" href="' + esc(siteUrl) + '" target="_blank" rel="noopener">Förhandsgranska hela sajten &#8599;</a>' : "") +
         "</div>" +
         '<div id="aichat" class="aichat"><div class="spinner"></div></div>' +
-        '<details class="upd-images"><summary class="upd-images-sum">📷 Mina bilder <span class="muted">— ladda upp &amp; återanvänd</span></summary><div id="uploads-box"></div></details>' +
+        '<details class="upd-images"><summary class="upd-images-sum">📷 Mina bilder</summary><div id="uploads-box"></div></details>' +
         '<div id="aichat-history"></div>' +
         '<div id="draft-box"></div>';
       after = function () { loadAIChat(cp); loadUploads(cp.id, true); loadDraft(cp.id); };
