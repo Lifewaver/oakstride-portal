@@ -557,6 +557,17 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .aichat-usage.low{color:#a56a24}
 .aichat-usage.over{color:#8a2b1e;background:#fdf3f0}
 .aichat-usage-hint{color:#7a8378;display:block;margin-top:.15rem;font-size:.78rem}
+/* Lanseringsval på färdigt utkast */
+.draft-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}
+.draft-hint{font-size:.76rem;color:#7a8378;margin-top:.4rem;line-height:1.35}
+/* "Mina bilder"-galleri (fällbart) */
+.upd-images{margin-bottom:1.2rem;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.upd-images-sum{cursor:pointer;list-style:none;padding:.8rem 1rem;font-weight:600;display:flex;align-items:center;gap:.4rem}
+.upd-images-sum::-webkit-details-marker{display:none}
+.upd-images-sum::after{content:"▾";margin-left:auto;color:var(--moss);transition:transform .15s}
+.upd-images[open] .upd-images-sum::after{transform:rotate(180deg)}
+.upd-images[open] .upd-images-sum{border-bottom:1px solid var(--line)}
+.upd-images #uploads-box .card{margin:0;border:0;box-shadow:none}
 /* Uppdatera sajten: förhandsvisning bredvid chatten */
 .upd-grid{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,1.5fr);gap:1rem;align-items:start;margin-bottom:1rem}
 .upd-grid>.card,.upd-grid>.aichat>.card{margin:0}
