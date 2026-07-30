@@ -601,6 +601,22 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .draftcard .dc-t{font-weight:600;font-size:.92rem;color:var(--ink)}
 .draftcard .dc-pv{font-size:.82rem;color:var(--moss);margin:.3rem 0 0}
 .draftcard .dc-pv a{color:var(--acorn);font-weight:600;text-decoration:none}
+/* Förbruknings-stapel */
+.aichat-usage{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.usage-bar{height:5px;border-radius:3px;background:var(--line);overflow:hidden;width:120px;flex:none}
+.usage-bar i{display:block;height:100%;background:var(--moss)}
+.aichat-usage.low .usage-bar i{background:var(--amber,#c78a3e)}
+/* Tidigare ändringar (historik) */
+.upd-history{margin-bottom:1.2rem}
+.upd-history-h{font-family:'Bricolage Grotesque',sans-serif;font-size:1.1rem;color:var(--pine);margin:0 0 .3rem}
+.histlist{display:flex;flex-direction:column}
+.histrow{display:flex;align-items:center;gap:.6rem;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:.65rem .1rem;cursor:pointer;font-size:.9rem;color:var(--ink)}
+.histlist .histrow:first-child{border-top:0}
+.histrow:hover{color:var(--acorn)}
+.histrow-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hpill{margin-left:auto;flex:none;font-family:'IBM Plex Mono',monospace;font-size:.62rem;letter-spacing:.05em;padding:.15rem .55rem;border-radius:999px}
+.hpill.live{background:#e0f0e7;color:#1e7a4b}
+.hpill.rev{background:#fdf1e3;color:#a56a24}
 /* Uppdatera sajten: förhandsvisning bredvid chatten */
 .upd-grid{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,1.5fr);gap:1rem;align-items:start;margin-bottom:1rem}
 .upd-grid>.card,.upd-grid>.aichat>.card{margin:0}
