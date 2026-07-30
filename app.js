@@ -1029,9 +1029,9 @@
       after = function () { loadOnboarding(); loadDraft(cp.id); loadUploads(cp.id); };
     } else if (custTab === "uppdatera") {
       html = '<h1 class="dash-title">Uppdatera sajten</h1>' +
-        '<p class="muted">Se din sajt och chatta med AI-agenten — beskriv vad du vill ändra så tar den fram ett utkast som OakStride granskar och publicerar. Ingår i din månadsavgift.</p>' +
+        '<p class="muted">Din sajt till vänster, ändringar till höger. Beskriv vad du vill — AI:n tar fram ett utkast, sen väljer du att <strong>lansera direkt</strong> eller <strong>be OakStride granska</strong> först. Ingår i din månadsavgift.</p>' +
         '<div class="upd-grid">' + sitePreviewCard() + '<div id="aichat" class="aichat"><div class="spinner"></div></div></div>' +
-        '<div id="uploads-box"></div>' +
+        '<details class="upd-images"><summary class="upd-images-sum">📷 Mina bilder <span class="muted">— ladda upp &amp; återanvänd</span></summary><div id="uploads-box"></div></details>' +
         '<div id="draft-box"></div>';
       after = function () { loadAIChat(cp); loadUploads(cp.id, true); loadDraft(cp.id); };
     } else if (custTab === "statistik") {
@@ -1171,11 +1171,23 @@
         html += '<div class="aichat-row ' + (mine ? "me" : "them") + '"><div class="bubble ' + (mine ? "bubble-user" : (isAI ? "bubble-ai" : "bubble-oak")) + '">' + who + esc(c.body).replace(/\n/g, "<br>") + "</div></div>";
       });
       var st = active.status, sm = "";
-      if (st === "draft_ready") sm = "✅ Ett utkast är klart!" + (active.preview_url ? ' <a href="' + esc(active.preview_url) + '" target="_blank" rel="noopener">Förhandsgranska →</a>' : "") + " OakStride granskar och publicerar.";
+      if (st === "draft_ready") {
+        sm = "✅ Utkastet är klart! " +
+          (active.preview_url ? '<a href="' + esc(active.preview_url) + '" target="_blank" rel="noopener">Förhandsgranska &rarr;</a>' : "") +
+          '<div class="draft-actions">' +
+            '<button type="button" class="btn btn-primary btn-sm" data-publish="' + active.id + '">🚀 Lansera direkt</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-review="' + active.id + '">🔍 Be OakStride granska</button>' +
+          "</div>" +
+          '<div class="draft-hint">Lansera direkt = publiceras på din sajt på en gång. Granska = vi tittar innan det går live.</div>';
+      }
       else if (st === "questions") sm = "💬 AI:n har en fråga — svara nedan så fortsätter den.";
       else if (st === "new" || st === "in_progress") sm = "⏳ AI:n arbetar på din ändring… det kan ta några minuter. Tryck ↻ Uppdatera.";
-      else if (st === "approved") sm = "👍 Godkänd — publiceras av OakStride.";
+      else if (st === "publishing") sm = "🚀 Publicerar din ändring… det tar en minut. Tryck ↻ Uppdatera.";
+      else if (st === "published") sm = "🎉 Ändringen är live på din sajt!";
+      else if (st === "approved") sm = "👍 Skickad till OakStride — vi granskar och publicerar.";
       thread.innerHTML = html + (sm ? '<div class="aichat-status">' + sm + "</div>" : "");
+      var pb = thread.querySelector("[data-publish]"); if (pb) pb.addEventListener("click", function () { publishChange(active, cp); });
+      var rb = thread.querySelector("[data-review]"); if (rb) rb.addEventListener("click", function () { requestReview(active, cp); });
       thread.scrollTop = thread.scrollHeight;
     });
   }
@@ -1199,6 +1211,30 @@
         sb.rpc("request_ai_draft", { p_request_id: r.data.id, p_reason: "draft" }).then(function (rr) { afterAISend(cp, rr); });
       });
     }
+  }
+
+  // Kunden lanserar utkastet direkt på livesajten (utan admin-granskning).
+  function publishChange(active, cp) {
+    if (typeof previewBlocked === "function" && previewBlocked()) return;
+    if (!window.confirm("Lansera ändringen direkt på din livesajt?\n\nDen publiceras utan OakStrides granskning.")) return;
+    sb.rpc("request_publish_change", { p_request_id: active.id }).then(function (r) {
+      if (r.error || (r.data && r.data.ok === false)) {
+        toast("Kunde inte publicera: " + ((r.data && r.data.error) || (r.error && r.error.message) || "fel"), true);
+        return;
+      }
+      toast("Publicerar… det tar en minut. Tryck ↻ Uppdatera.");
+      loadAIChat(cp);
+    });
+  }
+
+  // Kunden ber OakStride granska & publicera (draft_ready → approved).
+  function requestReview(active, cp) {
+    if (typeof previewBlocked === "function" && previewBlocked()) return;
+    sb.from("requests").update({ status: "approved" }).eq("id", active.id).then(function (r) {
+      if (r.error) { toast("Kunde inte skicka för granskning: " + r.error.message, true); return; }
+      toast("Skickat till OakStride för granskning & publicering.");
+      loadAIChat(cp);
+    });
   }
 
   function afterAISend(cp, rr) {
