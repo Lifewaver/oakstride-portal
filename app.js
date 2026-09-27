@@ -754,6 +754,26 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // Varje skrivning mot Supabase (insert/update/upsert/delete/rpc) gar genom
+  // skriv(). Issue #72: felhanteringen i filen sitter i `.then` och laser
+  // `r.error`. Avvisas loftet - t.ex. om `fetch` sjalv kastar for att
+  // anslutningen dor mitt i anropet - kors ingen `.then` alls: ingen text,
+  // ingen aterstalld knapp, en kryssruta som star kvar ikryssad.
+  //
+  // skriv() gor om ett avvisat lofte till ett vanligt svar med `error` satt.
+  // Anroparens befintliga felgren tar det da, precis som ett PostgREST-fel -
+  // exakt en av vagarna lyckat/fel kors. `code` satts inte med flit, sa att
+  // kontroller som `error.code !== "23505"` behandlar det som ett riktigt fel.
+  //
+  // ⚠️ Fangar BARA avvisningen av sjalva anropet. Ett fel som kastas inne i
+  // anroparens `.then` fangas inte har - det ar ett annat fel.
+  function skriv(anrop) {
+    return Promise.resolve(anrop).then(null, function (e) {
+      var orsak = (e && e.message) ? e.message : String(e);
+      return { data: null, error: { message: "anropet nådde inte fram (" + orsak + ")" } };
+    });
+  }
+
   function toast(msg, isError) {
     var t = document.getElementById("toast");
     t.textContent = msg;
@@ -889,13 +909,13 @@
       // pastaendet att ytan finns var falskt, och det ar det som rattas har - nasta
       // lasare ska inte tro att den finns for att en kommentar sa det.
       if (blockeraUtanKontrollsumma(hash, function () { btn.disabled = false; }, "agree-status")) return;
-      sb.from("agreement_acceptances").insert({
+      skriv(sb.from("agreement_acceptances").insert({
         user_id: cuid(),
         agreement_version: custAgreement.version,
         document_title: custAgreement.title,
         document_hash: hash,
         user_agent: navigator.userAgent
-      }).then(function (res) {
+      })).then(function (res) {
         if (res.error && res.error.code !== "23505") {
           var n = document.getElementById("agree-status");
           if (n) { n.hidden = false; n.className = "status-note error"; n.textContent = "Kunde inte spara: " + res.error.message; }
@@ -1203,8 +1223,8 @@
         // i stallet for att tyst traffa noll rader. Uppmatt 2026-09-06. Far tabellen
         // nagon gang en policy dar en USING-halva kan filtrera utan att `with check`
         // fyrar, ar halet tillbaka och tyst - lagg da `.select()` har ocksa.
-        var skrivningar = [sb.from("profiles").update({ full_name: newName, company: newCompany }).eq("id", session.user.id).select("id")];
-        if (hadeRad || !tomFaktura) skrivningar.push(sb.from("billing_details").upsert(bill));
+        var skrivningar = [skriv(sb.from("profiles").update({ full_name: newName, company: newCompany }).eq("id", session.user.id).select("id"))];
+        if (hadeRad || !tomFaktura) skrivningar.push(skriv(sb.from("billing_details").upsert(bill)));
 
         Promise.all(skrivningar).then(function (rs) {
           var err = (rs[0] && rs[0].error) || (rs[1] && rs[1].error);
@@ -1276,10 +1296,10 @@
 
   document.getElementById("btn-pending-save").addEventListener("click", function () {
     var note = document.getElementById("pending-status");
-    sb.from("profiles").update({
+    skriv(sb.from("profiles").update({
       full_name: document.getElementById("pending-name").value.trim() || null,
       company: document.getElementById("pending-company").value.trim() || null
-    }).eq("id", session.user.id).then(function (res) {
+    }).eq("id", session.user.id)).then(function (res) {
       note.hidden = false;
       if (res.error) {
         note.className = "status-note error";
@@ -1521,7 +1541,7 @@
   // Visar kundens förbrukning denna månad ("X av 15 AI-ändringar") — matchar RPC-taket.
   function loadAIUsage() {
     var box = document.getElementById("aichat-usage"); if (!box) return;
-    sb.rpc("ai_usage_this_month").then(function (res) {
+    skriv(sb.rpc("ai_usage_this_month")).then(function (res) {
       if (!box.isConnected) return;
       // 🔴 RATTAT 2026-09-06 (issue #66, fynd 4). `res.error` lastes inte. Vid fel
       // blev `d = {}` -> used 0, cap 15 -> rutan visade "15 av 15 andringar kvar",
@@ -1604,16 +1624,16 @@
     // En avslutad ändring (publicerad/klar/godkänd) → nästa meddelande blir en NY ändring automatiskt.
     var finished = active && ["published", "done", "approved", "failed"].indexOf(active.status) >= 0;
     if (active && aiChatActiveId !== "__new__" && !finished) {
-      sb.from("request_comments").insert({ request_id: active.id, author_id: cuid(), body: msg }).then(function (r) {
+      skriv(sb.from("request_comments").insert({ request_id: active.id, author_id: cuid(), body: msg })).then(function (r) {
         if (r.error) return fail("Kunde inte skicka: " + r.error.message);
-        sb.rpc("request_ai_draft", { p_request_id: active.id, p_reason: "answers" }).then(function (rr) { afterAISend(cp, rr); });
+        skriv(sb.rpc("request_ai_draft", { p_request_id: active.id, p_reason: "answers" })).then(function (rr) { afterAISend(cp, rr); });
       });
     } else {
       var title = msg.length > 60 ? msg.slice(0, 57) + "…" : msg;
-      sb.from("requests").insert({ user_id: cp.id, title: title, description: msg, status: "new" }).select().single().then(function (r) {
+      skriv(sb.from("requests").insert({ user_id: cp.id, title: title, description: msg, status: "new" }).select().single()).then(function (r) {
         if (r.error) return fail("Kunde inte skapa ändring: " + r.error.message);
         aiChatActiveId = r.data.id;
-        sb.rpc("request_ai_draft", { p_request_id: r.data.id, p_reason: "draft" }).then(function (rr) { afterAISend(cp, rr); });
+        skriv(sb.rpc("request_ai_draft", { p_request_id: r.data.id, p_reason: "draft" })).then(function (rr) { afterAISend(cp, rr); });
       });
     }
   }
@@ -1622,7 +1642,7 @@
   function publishChange(active, cp) {
     if (previewBlocked()) return;
     if (!window.confirm("Lansera ändringen direkt på din livesajt?\n\nDen publiceras utan OakStrides granskning.")) return;
-    sb.rpc("request_publish_change", { p_request_id: active.id }).then(function (r) {
+    skriv(sb.rpc("request_publish_change", { p_request_id: active.id })).then(function (r) {
       if (r.error || (r.data && r.data.ok === false)) {
         toast("Kunde inte publicera: " + ((r.data && r.data.error) || (r.error && r.error.message) || "fel"), true);
         return;
@@ -1635,7 +1655,7 @@
   // Kunden ber OakStride granska & publicera (draft_ready → approved).
   function requestReview(active, cp) {
     if (previewBlocked()) return;
-    sb.from("requests").update({ status: "approved" }).eq("id", active.id).then(function (r) {
+    skriv(sb.from("requests").update({ status: "approved" }).eq("id", active.id)).then(function (r) {
       if (r.error) { toast("Kunde inte skicka för granskning: " + r.error.message, true); return; }
       toast("Skickat till OakStride för granskning & publicering.");
       loadAIChat(cp);
@@ -2122,10 +2142,10 @@
     }
     sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
       if (blockeraUtanKontrollsumma(hash, kryssaUr, "hash-status-uppdaterad")) return;
-      sb.from("agreement_acceptances").insert({
+      skriv(sb.from("agreement_acceptances").insert({
         user_id: cuid(), agreement_version: custAgreement.version, document_title: custAgreement.title,
         document_hash: hash, user_agent: navigator.userAgent, order_summary: summary
-      }).then(function (r2) {
+      })).then(function (r2) {
         if (r2.error && r2.error.code !== "23505") { visaFel("hash-status-uppdaterad", "Kunde inte spara: " + r2.error.message); kryssaUr(); return; }
         // 🔴 TILLAGT efter tystnadsgranskning (blockerande fynd 1). Callbacken
         // tog INGET argument - `res.error` lastes aldrig. Tabellen har primarnyckel
@@ -2138,7 +2158,7 @@
         // har filen, saveExtraApproval, som gor det ratt sedan tidigare.
         //
         // 23505 ar avsiktlig idempotens (redan godkant), inte ett svalt fel.
-        sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: spec.version }).then(function (r3) {
+        skriv(sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: spec.version })).then(function (r3) {
           if (r3 && r3.error && r3.error.code !== "23505") {
             visaFel("hash-status-uppdaterad", "Godkännandet kunde inte registreras: " +
                     (r3.error.message || "okänt fel") + ". Försök igen, eller hör av dig till OakStride.");
@@ -2161,7 +2181,7 @@
     if (!b.company || !b.org_nr || !b.invoice_email) { toast("Fyll i minst företagsnamn, org.nr och fakturamejl.", true); return; }
     btn.disabled = true;
     b.user_id = cuid(); b.updated_at = new Date().toISOString();
-    sb.from("billing_details").upsert(b).then(function (r1) {
+    skriv(sb.from("billing_details").upsert(b)).then(function (r1) {
       if (r1.error) { visaFel("hash-status-offert", "Kunde inte spara faktureringsuppgifter: " + r1.error.message); btn.disabled = false; return; }
       var summary = orderSummaryText(spec.data, ordered);
       sha256Hex(custAgreement.version + "\n" + custAgreement.html).then(function (hash) {
@@ -2169,14 +2189,14 @@
         // Det ar med flit: de ar kundens egna uppgifter och ska inte kastas bort for
         // att kontrollsumman felade. Det som INTE skrivs ar godkannandet.
         if (blockeraUtanKontrollsumma(hash, function () { btn.disabled = false; }, "hash-status-offert")) return;
-        sb.from("agreement_acceptances").insert({
+        skriv(sb.from("agreement_acceptances").insert({
           user_id: cuid(), agreement_version: custAgreement.version, document_title: custAgreement.title,
           document_hash: hash, user_agent: navigator.userAgent, order_summary: summary
-        }).then(function (r2) {
+        })).then(function (r2) {
           if (r2.error && r2.error.code !== "23505") { visaFel("hash-status-offert", "Kunde inte spara godkännande: " + r2.error.message); btn.disabled = false; return; }
           // 🔴 TILLAGT efter tystnadsgranskning (blockerande fynd 1) - samma
           // ovakade insert som i approveUpdatedOffer, har med btn kvar att aterstalla.
-          sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: spec.version }).then(function (r3) {
+          skriv(sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: spec.version })).then(function (r3) {
             if (r3 && r3.error && r3.error.code !== "23505") {
               visaFel("hash-status-offert", "Godkännandet kunde inte registreras: " +
                       (r3.error.message || "okänt fel") + ". Försök igen, eller hör av dig till OakStride.");
@@ -2217,7 +2237,7 @@
 
   function checkoffStep(n) {
     if (previewBlocked()) return;
-    sb.from("onboarding_checkoffs").insert({ user_id: cuid(), step_no: n }).then(function (res) {
+    skriv(sb.from("onboarding_checkoffs").insert({ user_id: cuid(), step_no: n })).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Steg godkänt!");
       loadOnboarding();
@@ -2226,7 +2246,7 @@
 
   function saveExtraApproval(version) {
     if (previewBlocked()) return;
-    sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: version }).then(function (res) {
+    skriv(sb.from("extra_work_approvals").insert({ user_id: cuid(), spec_version: version })).then(function (res) {
       if (res.error && res.error.code !== "23505") { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast("Tack! Det extra arbetet är godkänt.");
       loadOnboarding();
@@ -2236,7 +2256,7 @@
   // Kundens förtydligande (per sida eller hela siten) dokumenteras i kravspecen som ny version.
   function postProposal(uid, role, body) {
     if (role === "customer" && previewBlocked()) return;
-    sb.from("site_change_proposals").insert({ user_id: uid, author_role: role, body: body }).then(function (res) {
+    skriv(sb.from("site_change_proposals").insert({ user_id: uid, author_role: role, body: body })).then(function (res) {
       if (res.error) { toast("Kunde inte skicka: " + res.error.message, true); return; }
       toast(role === "admin" ? "Förslag skickat till kunden." : "Tack! Ditt förslag är skickat.");
       if (role === "customer") loadOnboarding(); else renderAdminCustomerDetail(uid);
@@ -2245,7 +2265,7 @@
 
   function saveSpecClarification(scope, text) {
     if (previewBlocked()) return;
-    sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null, p_user: actingUid || null }).then(function (res) {
+    skriv(sb.rpc("add_customer_spec_version", { p_complement: (text || "").trim(), p_scope: scope || null, p_user: actingUid || null })).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
       if (!res.data) { toast("Kravbilden är inte redo för förtydliganden ännu.", true); return; }
       toast("Tack! Ditt förtydligande är dokumenterat i kravspecifikationen.");
@@ -2264,7 +2284,7 @@
 
   function decideAddon(id, status) {
     if (previewBlocked()) return;
-    sb.from("addons").update({ status: status }).eq("id", id).then(function (res) {
+    skriv(sb.from("addons").update({ status: status }).eq("id", id)).then(function (res) {
       if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
       toast(status === "ordered" ? "Tillägg beställt — tack!" : "Tillägg avböjt.");
       loadOnboarding();
@@ -2274,7 +2294,7 @@
   function loadStats(site) {
     var box = document.getElementById("stats-box");
     if (!site) { box.innerHTML = '<p class="muted">Statistiken aktiveras när din hemsida är kopplad till kontot.</p>'; return; }
-    sb.rpc("site_stats", { p_site: site }).then(function (res) {
+    skriv(sb.rpc("site_stats", { p_site: site })).then(function (res) {
       if (!box.isConnected) return;
       var s = res.data;
       if (res.error || !s) {
@@ -2370,13 +2390,13 @@
       if (previewBlocked()) return;
       var btn = e.target.querySelector("button[type=submit]");
       btn.disabled = true;
-      sb.from("requests").insert({
+      skriv(sb.from("requests").insert({
         user_id: cuid(),
         title: document.getElementById("f-title").value.trim(),
         page_url: document.getElementById("f-url").value.trim() || null,
         priority: document.getElementById("f-prio").value,
         description: document.getElementById("f-desc").value.trim()
-      }).then(function (res) {
+      })).then(function (res) {
         btn.disabled = false;
         if (res.error) { toast("Kunde inte skicka: " + res.error.message, true); return; }
         toast("Tack! Din förfrågan är skickad.");
@@ -2510,7 +2530,7 @@
           // en icke-admin gor `new := old` nar status inte ar draft_ready. Da
           // LYCKAS uppdateringen, traffar 1 rad, ger inget fel - och ingenting
           // andrades. Enda satt att veta ar att LASA TILLBAKA statusen.
-          sb.from("requests").update({ status: "approved" }).eq("id", id).select("status").then(function (res) {
+          skriv(sb.from("requests").update({ status: "approved" }).eq("id", id).select("status")).then(function (res) {
             if (res.error) { toast("Kunde inte godkänna: " + res.error.message, true); btnApprove.disabled = false; return; }
             var nyStatus = (res.data && res.data[0]) ? res.data[0].status : null;
             if (nyStatus !== "approved") {
@@ -2531,7 +2551,7 @@
       if (btnAgent) {
         btnAgent.addEventListener("click", function () {
           btnAgent.disabled = true;
-          sb.from("agent_jobs").insert({ request_id: id, reason: "draft" }).then(function (res) {
+          skriv(sb.from("agent_jobs").insert({ request_id: id, reason: "draft" })).then(function (res) {
             if (res.error) { toast("Kunde inte starta Claude: " + res.error.message, true); btnAgent.disabled = false; return; }
             // 🔴 RATTAT 2026-09-06 (#66, fynd 7). Hanteraren tog INGET argument - aven
             // en misslyckad uppdatering gav samma lyckade toast. Jobbet skapades, men
@@ -2551,7 +2571,7 @@
             //   rollback;
             //
             // Utfall 2026-09-06 mot driftdatabasen: 0 andrade rader, ingen felkod.
-            sb.from("requests").update({ status: "in_progress" }).eq("id", id).select("id").then(function (up) {
+            skriv(sb.from("requests").update({ status: "in_progress" }).eq("id", id).select("id")).then(function (up) {
               var skrivna = (up && up.data) ? up.data.length : 0;
               if ((up && up.error) || !skrivna) {
                 toast("Claude är startad, men ärendets status kunde inte sättas till pågående" +
@@ -2584,7 +2604,7 @@
           // med repots, sa den hoppas over for en akta admin - men det ar just nar
           // is_admin() ar falskt den har vagen oppnar sig.)
           var vald = e.target.value;
-          sb.from("requests").update({ status: vald }).eq("id", id).select("status").then(function (res) {
+          skriv(sb.from("requests").update({ status: vald }).eq("id", id).select("status")).then(function (res) {
             var ny = (res && res.data && res.data[0]) ? res.data[0].status : null;
             if (res && res.error) toast("Kunde inte uppdatera status: " + res.error.message, true);
             else if (ny !== vald) toast("Statusen ändrades inte — ärendet står kvar som " +
@@ -2601,7 +2621,7 @@
             var items = textToChangeItems(document.getElementById("ch-items").value);
             var btn = formChange.querySelector("button");
             btn.disabled = true;
-            sb.from("requests").update({ change_note: note || null, change_items: items.length ? items : null }).eq("id", id).then(function (res) {
+            skriv(sb.from("requests").update({ change_note: note || null, change_items: items.length ? items : null }).eq("id", id)).then(function (res) {
               btn.disabled = false;
               if (res.error) { toast("Kunde inte spara: " + res.error.message, true); return; }
               toast("Uppdaterad kravspecifikation sparad.");
@@ -2615,7 +2635,7 @@
         if (previewBlocked()) return;
         var body = document.getElementById("c-body").value.trim();
         if (!body) return;
-        sb.from("request_comments").insert({ request_id: id, author_id: cuid(), body: body }).then(function (res) {
+        skriv(sb.from("request_comments").insert({ request_id: id, author_id: cuid(), body: body })).then(function (res) {
           if (res.error) { toast("Kunde inte skicka: " + res.error.message, true); return; }
           renderDetail(id, isAdmin);
         });
@@ -2680,7 +2700,7 @@
         function num(id) { var v = parseFloat(document.getElementById(id).value.replace(",", ".").replace(/\s/g, "")); return isNaN(v) ? null : v; }
         var row = { id: 1, site_price: num("p-site"), drift_month: num("p-drift"), rate_setup: num("p-setup"), rate_change: num("p-change"), updated_at: new Date().toISOString() };
         if (row.site_price == null || row.drift_month == null || row.rate_setup == null || row.rate_change == null) { toast("Fyll i alla priser med siffror.", true); return; }
-        sb.from("pricing_settings").upsert(row).then(function (r) {
+        skriv(sb.from("pricing_settings").upsert(row)).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           pricing = { site_price: row.site_price, drift_month: row.drift_month, rate_setup: row.rate_setup, rate_change: row.rate_change };
           AGREEMENT = buildAgreement(pricing);
@@ -2817,7 +2837,7 @@
       var btn = form.querySelector('button[type="submit"]');
       btn.disabled = true; btn.textContent = "Skapar jobb…";
       // Insert räcker – en DB-trigger (dispatch_build_site) startar agenten automatiskt.
-      sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief, customer_id: customer_id }).select().single().then(function (r) {
+      skriv(sb.from("build_jobs").insert({ slug: slug, company: company, segment: segment, brief: brief, customer_id: customer_id }).select().single()).then(function (r) {
         btn.disabled = false; btn.textContent = "Bygg sajt";
         if (r.error) { toast("Kunde inte skapa jobb: " + r.error.message, true); return; }
         toast("Bygget startat! Följ status nedan.");
@@ -2968,7 +2988,7 @@
       Array.prototype.forEach.call(box.querySelectorAll("[data-share]"), function (btn) {
         btn.addEventListener("click", function () {
           btn.disabled = true; btn.textContent = "Delar…";
-          sb.from("build_jobs").update({ shared_at: new Date().toISOString() }).eq("id", btn.getAttribute("data-share")).then(function (r) {
+          skriv(sb.from("build_jobs").update({ shared_at: new Date().toISOString() }).eq("id", btn.getAttribute("data-share"))).then(function (r) {
             if (r.error) { toast("Kunde inte dela: " + r.error.message, true); btn.disabled = false; btn.textContent = "Dela utkast med kund"; return; }
             toast("Utkastet delat – kunden får ett mejl och ser det i portalen.");
             loadBuildJobs(boxId, customerId);
@@ -2979,7 +2999,7 @@
         btn.addEventListener("click", function () {
           if (!window.confirm("Återställ jobbet?\n\nKnappen visas först när publiceringen stått still i 10 minuter. Jobbet flyttas till \"Publicering misslyckades\" så att du kan försöka igen eller radera det.")) return;
           btn.disabled = true; btn.textContent = "Återställer…";
-          sb.rpc("reset_publish_state", { p_job_id: btn.getAttribute("data-reset") }).then(function (r) {
+          skriv(sb.rpc("reset_publish_state", { p_job_id: btn.getAttribute("data-reset") })).then(function (r) {
             var fel = r.error ? r.error.message
                               : (r.data && r.data.ok === false ? (PUBLISH_FEL[r.data.error] || r.data.error) : "");
             if (fel) {
@@ -3021,7 +3041,7 @@
           // validerar domanen i databasen, satter brief.domain + status och dispatchar
           // agenten. Sedan migration 28 finns ingen trigger - ett statusskriv startar
           // ingenting, och den gamla loopen kan inte uppsta.
-          sb.rpc("request_publish_site", { p_job_id: id, p_domain: domain }).then(function (r) {
+          skriv(sb.rpc("request_publish_site", { p_job_id: id, p_domain: domain })).then(function (r) {
             var fel = r.error ? r.error.message
                               : (r.data && r.data.ok === false ? (PUBLISH_FEL[r.data.error] || r.data.error) : "");
             if (fel) {
@@ -3073,7 +3093,7 @@
       }).join("");
       Array.prototype.forEach.call(box.querySelectorAll("[data-bstatus]"), function (sel) {
         sel.addEventListener("change", function () {
-          sb.from("project_briefs").update({ status: sel.value }).eq("id", Number(sel.getAttribute("data-bstatus"))).then(function (r) {
+          skriv(sb.from("project_briefs").update({ status: sel.value }).eq("id", Number(sel.getAttribute("data-bstatus")))).then(function (r) {
             if (r.error) toast("Kunde inte spara: " + r.error.message, true); else toast("Status uppdaterad.");
           });
         });
@@ -3202,19 +3222,19 @@
         var pid = tr.getAttribute("data-id");
         var current = rows.find(function (p) { return p.id === pid; });
         tr.querySelector(".btn-approve").addEventListener("click", function () {
-          sb.from("profiles").update({ approved: !current.approved }).eq("id", pid).then(function (res2) {
+          skriv(sb.from("profiles").update({ approved: !current.approved }).eq("id", pid)).then(function (res2) {
             if (res2.error) toast("Kunde inte uppdatera: " + res2.error.message, true);
             else { toast(current.approved ? "Kontot avstängt." : "Kontot godkänt."); renderAdminCustomers(mode); }
           });
         });
         tr.querySelector(".inp-site").addEventListener("change", function (e) {
-          sb.from("profiles").update({ website: e.target.value.trim() || null }).eq("id", pid).then(function (res2) {
+          skriv(sb.from("profiles").update({ website: e.target.value.trim() || null }).eq("id", pid)).then(function (res2) {
             if (res2.error) toast("Kunde inte spara hemsida: " + res2.error.message, true);
             else toast("Hemsida sparad.");
           });
         });
         tr.querySelector(".inp-repo").addEventListener("change", function (e) {
-          sb.from("profiles").update({ github_repo: e.target.value.trim() || null }).eq("id", pid).then(function (res2) {
+          skriv(sb.from("profiles").update({ github_repo: e.target.value.trim() || null }).eq("id", pid)).then(function (res2) {
             if (res2.error) toast("Kunde inte spara repo: " + res2.error.message, true);
             else toast("GitHub-repo sparat.");
           });
@@ -3427,7 +3447,7 @@
       });
       Array.prototype.forEach.call(document.querySelectorAll("[data-undo]"), function (btn) {
         btn.addEventListener("click", function () {
-          sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo"))).then(function (r) {
+          skriv(sb.from("onboarding_checkoffs").delete().eq("user_id", pid).eq("step_no", Number(btn.getAttribute("data-undo")))).then(function (r) {
             if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
@@ -3435,7 +3455,7 @@
       Array.prototype.forEach.call(document.querySelectorAll("[data-mark-done]"), function (btn) {
         btn.addEventListener("click", function () {
           var n = Number(btn.getAttribute("data-mark-done"));
-          sb.from("onboarding_checkoffs").insert({ user_id: pid, step_no: n }).then(function (r) {
+          skriv(sb.from("onboarding_checkoffs").insert({ user_id: pid, step_no: n })).then(function (r) {
             if (r.error) toast("Kunde inte markera: " + r.error.message, true);
             else { toast("Steg " + n + " markerat som klart."); renderAdminCustomerDetail(pid); }
           });
@@ -3445,7 +3465,7 @@
       if (sendMeeting) sendMeeting.addEventListener("click", function () {
         var md = document.getElementById("adm-meeting").value || null;
         if (!md) { toast("Välj ett datum först.", true); return; }
-        sb.from("profiles").update({ meeting_at: md }).eq("id", pid).then(function (r) {
+        skriv(sb.from("profiles").update({ meeting_at: md }).eq("id", pid)).then(function (r) {
           if (r.error) { toast("Kunde inte skicka: " + r.error.message, true); return; }
           toast("Datum skickat till kund — de ser det i portalen och får ett mejl.");
           renderAdminCustomerDetail(pid);
@@ -3455,8 +3475,8 @@
       if (saveStep2) saveStep2.addEventListener("click", function () {
         function v(id) { return document.getElementById(id).value.trim() || null; }
         Promise.all([
-          sb.from("profiles").update({ meeting_at: document.getElementById("adm-meeting").value || null }).eq("id", pid),
-          sb.from("onboarding_content").upsert({ user_id: pid, step_no: 3, body: v("adm-c3"), link: null, transcript: v("adm-c3trans"), updated_at: new Date().toISOString() }, { onConflict: "user_id,step_no" })
+          skriv(sb.from("profiles").update({ meeting_at: document.getElementById("adm-meeting").value || null }).eq("id", pid)),
+          skriv(sb.from("onboarding_content").upsert({ user_id: pid, step_no: 3, body: v("adm-c3"), link: null, transcript: v("adm-c3trans"), updated_at: new Date().toISOString() }, { onConflict: "user_id,step_no" }))
         ]).then(function (rs) {
           var err = rs[0].error || rs[1].error;
           if (err) { toast("Kunde inte spara: " + err.message, true); return; }
@@ -3465,14 +3485,14 @@
       });
       var saveWeb = document.querySelector("[data-save-website]");
       if (saveWeb) saveWeb.addEventListener("click", function () {
-        sb.from("profiles").update({ website: document.getElementById("adm-website").value.trim() || null }).eq("id", pid).then(function (r) {
+        skriv(sb.from("profiles").update({ website: document.getElementById("adm-website").value.trim() || null }).eq("id", pid)).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Sid-adress sparad."); renderAdminCustomerDetail(pid);
         });
       });
       var sendDraft = document.querySelector("[data-send-draft]");
       if (sendDraft) sendDraft.addEventListener("click", function () {
-        sb.from("onboarding_content").upsert({ user_id: pid, step_no: 5, body: document.getElementById("adm-draft-note").value.trim() || null, link: document.getElementById("adm-draft-link").value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "user_id,step_no" }).then(function (r) {
+        skriv(sb.from("onboarding_content").upsert({ user_id: pid, step_no: 5, body: document.getElementById("adm-draft-note").value.trim() || null, link: document.getElementById("adm-draft-link").value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "user_id,step_no" })).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Utkast skickat — kunden ser det på steg 4."); renderAdminCustomerDetail(pid);
         });
@@ -3486,14 +3506,14 @@
       var launchBtn = document.querySelector("[data-launch]");
       if (launchBtn) launchBtn.addEventListener("click", function () {
         if (!done[5] && !window.confirm("Kunden har inte godkänt den färdiga sidan än (steg 5). Vill du lansera ändå?")) return;
-        sb.from("profiles").update({ launched_at: new Date().toISOString(), launch_url: document.getElementById("adm-launch-url").value.trim() || null }).eq("id", pid).then(function (r) {
+        skriv(sb.from("profiles").update({ launched_at: new Date().toISOString(), launch_url: document.getElementById("adm-launch-url").value.trim() || null }).eq("id", pid)).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Markerad som lanserad — kunden ser det nu."); renderAdminCustomerDetail(pid);
         });
       });
       var unlaunch = document.querySelector("[data-unlaunch]");
       if (unlaunch) unlaunch.addEventListener("click", function () {
-        sb.from("profiles").update({ launched_at: null }).eq("id", pid).then(function (r) {
+        skriv(sb.from("profiles").update({ launched_at: null }).eq("id", pid)).then(function (r) {
           if (r.error) toast("Kunde inte ångra: " + r.error.message, true); else renderAdminCustomerDetail(pid);
         });
       });
@@ -3519,13 +3539,13 @@
         e.preventDefault();
         var data = readSpecEditor(specForm);
         var nextVer = (latestSpec ? latestSpec.version : 0) + 1;
-        sb.from("requirement_specs").insert({
+        skriv(sb.from("requirement_specs").insert({
           user_id: pid,
           version: nextVer,
           data: data,
           change_note: document.getElementById("spec-note").value.trim() || null,
           source: latestSpec ? "admin" : "baslinje"
-        }).then(function (r) {
+        })).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Kravspec sparad som version " + nextVer + ".");
           renderAdminCustomerDetail(pid);
@@ -3535,13 +3555,13 @@
         e.preventDefault();
         var price = parseFloat(document.getElementById("a-price").value.replace(",", ".").replace(/\s/g, ""));
         if (isNaN(price) || price < 0) { toast("Ange ett giltigt pris.", true); return; }
-        sb.from("addons").insert({
+        skriv(sb.from("addons").insert({
           user_id: pid,
           title: document.getElementById("a-title").value.trim(),
           description: document.getElementById("a-desc").value.trim() || null,
           price: price,
           billing: document.getElementById("a-billing").value
-        }).then(function (r) {
+        })).then(function (r) {
           if (r.error) { toast("Kunde inte spara: " + r.error.message, true); return; }
           toast("Tillägg föreslaget — kunden aviseras.");
           renderAdminCustomerDetail(pid);
@@ -3549,7 +3569,7 @@
       });
       Array.prototype.forEach.call(document.querySelectorAll("#admin-addons [data-del]"), function (btn) {
         btn.addEventListener("click", function () {
-          sb.from("addons").delete().eq("id", Number(btn.getAttribute("data-del"))).then(function (r) {
+          skriv(sb.from("addons").delete().eq("id", Number(btn.getAttribute("data-del")))).then(function (r) {
             if (r.error) toast("Kunde inte ta bort: " + r.error.message, true); else renderAdminCustomerDetail(pid);
           });
         });
